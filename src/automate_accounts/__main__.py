@@ -56,18 +56,34 @@ def create_one() -> int:
         return 1
 
 
-COMMANDS = {"smoke": smoke, "create-one": create_one}
+def menu() -> int:
+    """Abre o menu interativo (padrão)."""
+    from .ui.app import AccountsApp  # import tardio: Textual só é carregado quando necessário
+
+    try:
+        settings = load_settings()
+    except RuntimeError as exc:
+        print(f"Configuração incompleta: {exc}")
+        print("Copie .env.example para .env e preencha.")
+        return 1
+    setup_logging(logging.INFO)  # só em arquivo: logs no terminal quebrariam a interface
+    AccountsApp(settings).run()
+    return 0
+
+
+COMMANDS = {"menu": menu, "smoke": smoke, "create-one": create_one}
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog="automate-accounts")
     parser.add_argument(
-        "command", choices=COMMANDS,
-        help="smoke: valida a infraestrutura; create-one: cria uma conta de teste",
+        "command", choices=COMMANDS, nargs="?", default="menu",
+        help="menu (padrão); smoke: valida a infraestrutura; create-one: cria uma conta",
     )
     args = parser.parse_args()
 
-    setup_logging(logging.INFO, logging.StreamHandler(sys.stderr))
+    if args.command != "menu":
+        setup_logging(logging.INFO, logging.StreamHandler(sys.stderr))
     return COMMANDS[args.command]()
 
 
