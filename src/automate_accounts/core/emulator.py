@@ -7,6 +7,7 @@ import subprocess
 import time
 
 from ..config import Settings
+from . import processes
 
 log = logging.getLogger(__name__)
 
@@ -76,6 +77,7 @@ class EmulatorManager:
             cmd.append("-wipe-data")
         log.info("Iniciando emulador: %s", " ".join(cmd))
         self._proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        processes.register("emulator", self._proc.pid)
 
     def start(self, wipe: bool | None = None) -> None:
         self.begin(wipe)
@@ -118,6 +120,7 @@ class EmulatorManager:
             except subprocess.TimeoutExpired:
                 self._proc.kill()
             self._proc = None
+            processes.unregister("emulator")
         # a porta só fica livre para o próximo boot depois que o device some do adb
         deadline = time.monotonic() + 30
         while time.monotonic() < deadline and self._device_online():

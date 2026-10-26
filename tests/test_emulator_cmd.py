@@ -19,6 +19,7 @@ def settings(tmp_path: Path) -> Settings:
 class FakeProc:
     def __init__(self, cmd):
         self.cmd = cmd
+        self.pid = 4242
         self.returncode = None
 
     def poll(self):
@@ -32,6 +33,8 @@ class FakeProc:
 
 
 def capture_launch(monkeypatch, mgr):
+    monkeypatch.setattr(emu_mod.processes, "register", lambda *_a, **_k: None)
+    monkeypatch.setattr(emu_mod.processes, "unregister", lambda *_a, **_k: None)
     launched: list[FakeProc] = []
     monkeypatch.setattr(mgr, "list_avds", lambda: ["Pixel"])
     monkeypatch.setattr(mgr, "_device_online", lambda: False)

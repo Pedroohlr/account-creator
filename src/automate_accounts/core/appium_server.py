@@ -11,6 +11,7 @@ import urllib.error
 import urllib.request
 
 from ..config import ROOT, Settings
+from . import processes
 
 log = logging.getLogger(__name__)
 
@@ -54,6 +55,7 @@ class AppiumServer:
         self._proc = subprocess.Popen(
             cmd, stdout=self._log_file, stderr=subprocess.STDOUT, env=env
         )
+        processes.register("appium", self._proc.pid)
 
         deadline = time.monotonic() + cfg.startup_timeout
         while time.monotonic() < deadline:
@@ -75,6 +77,7 @@ class AppiumServer:
                 capture_output=True, check=False,
             )
             self._proc = None
+            processes.unregister("appium")
         if self._log_file:
             self._log_file.close()
             self._log_file = None

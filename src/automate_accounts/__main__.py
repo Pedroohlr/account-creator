@@ -6,6 +6,7 @@ import logging
 import sys
 
 from .config import ROOT, load_settings
+from .core import processes
 from .core.driver import clear_browser_state
 from .core.session import mobile_session
 from .data.generator import generate_account
@@ -85,7 +86,17 @@ def main() -> int:
 
     if args.command != "menu":
         setup_logging(logging.INFO, logging.StreamHandler(sys.stderr))
-    return COMMANDS[args.command]()
+    try:
+        processes.acquire_lock()
+    except processes.AlreadyRunning as exc:
+        print(exc)
+        return 1
+    try:
+        for orphan in processes.cleanup_orphans():
+            log.warning("Processo órfão encerrado: %s", orphan)
+        return COMMANDS[args.command]()
+    finally:
+        processes.release_lock()
 
 
 if __name__ == "__main__":
