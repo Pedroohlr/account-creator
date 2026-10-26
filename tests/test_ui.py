@@ -40,6 +40,7 @@ async def test_tabs_and_dashboard_numbers(app):
         assert app.query_one("#d-recent", DataTable).row_count == 3
         for key, tab in (("f2", "tab-new"), ("f3", "tab-accounts"), ("f4", "tab-health"), ("f5", "tab-settings")):
             await pilot.press(key)
+            await pilot.pause()
             assert tabs.active == tab
 
 
