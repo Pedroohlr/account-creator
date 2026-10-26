@@ -14,8 +14,12 @@ from .emulator import SERIAL
 log = logging.getLogger(__name__)
 
 
+PROXY_HOST_FROM_EMULATOR = "10.0.2.2"   # o PC visto de dentro do emulador
+
+
 def create_driver(
-    settings: Settings, user_agent: str | None = None, attempts: int = 3
+    settings: Settings, user_agent: str | None = None, attempts: int = 3,
+    proxy_port: int | None = None,
 ) -> webdriver.Remote:
     options = UiAutomator2Options()
     options.platform_name = "Android"
@@ -28,6 +32,8 @@ def create_driver(
     chrome_args = ["--no-first-run", "--disable-fre", "--no-default-browser-check"]
     if user_agent:
         chrome_args.append(f"--user-agent={user_agent}")
+    if proxy_port:   # proxy local do PC: autentica e troca de IP (core/proxy.py)
+        chrome_args.append(f"--proxy-server=http://{PROXY_HOST_FROM_EMULATOR}:{proxy_port}")
     options.set_capability("goog:chromeOptions", {"args": chrome_args})
 
     options.set_capability("adbExecTimeout", 60000)

@@ -10,3 +10,4 @@ data/*.db
 .pytest_cache/
 .ruff_cache/
 config.local.yaml
+proxies.txt

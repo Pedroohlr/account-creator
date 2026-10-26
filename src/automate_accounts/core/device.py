@@ -26,12 +26,15 @@ class DeviceManager:
         self.driver_factory = driver_factory
         self.driver = None
         self.number = 0  # 1 = primeiro dispositivo
+        self.proxy_port: int | None = None   # proxy local por onde o Chrome sai (None = direto)
 
     def _new_driver(self):
         user_agent = None
         if self.settings.accounts.random_user_agent:
             user_agent = random_user_agent(self.emulator.chrome_major_version())
             log.info("User-Agent deste dispositivo: %s", user_agent)
+        if self.proxy_port:
+            return self.driver_factory(self.settings, user_agent, proxy_port=self.proxy_port)
         return self.driver_factory(self.settings, user_agent)
 
     def open(self):

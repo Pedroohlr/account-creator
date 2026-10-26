@@ -17,6 +17,15 @@ appium:
   port: 4723
   startup_timeout: 60
 
+# Proxy: none | static (lista em proxies.txt) | dynamic (gateway rotativo em PROXY_URL, no .env)
+proxy:
+  mode: none
+  session_template: "{password}_session-{session}"   # parâmetro que pede um IP novo ao provedor
+  rotate_on_limit: true      # 'Muitas tentativas' -> troca o IP e continua (em vez de esperar)
+  rotate_per_device: true    # cada dispositivo novo usa um IP novo
+  price_per_gb: 0            # preço do tráfego, para o custo do lote
+  currency: R$
+
 accounts:
   count: 5
   retries: 2

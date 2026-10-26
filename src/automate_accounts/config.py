@@ -42,6 +42,15 @@ class AccountsConfig(BaseModel):
     rate_limit_max_waits: int = Field(8, ge=0)  # esperas seguidas antes de desistir da conta
 
 
+class ProxyConfig(BaseModel):
+    mode: str = Field("none", pattern="^(none|static|dynamic)$")
+    session_template: str = "{password}_session-{session}"   # como o provedor pede um IP novo
+    rotate_on_limit: bool = True      # ao receber 'Muitas tentativas', troca o IP em vez de esperar
+    rotate_per_device: bool = True    # cada dispositivo novo sai por um IP novo
+    price_per_gb: float = Field(0.0, ge=0)   # custo do tráfego (para o relatório do lote)
+    currency: str = "R$"
+
+
 class Settings(BaseModel):
     target_url: str
     allowed_domains: list[str] = []   # vazio = sem restrição
@@ -50,6 +59,8 @@ class Settings(BaseModel):
     emulator: EmulatorConfig = EmulatorConfig()
     appium: AppiumConfig = AppiumConfig()
     accounts: AccountsConfig = AccountsConfig()
+    proxy: ProxyConfig = ProxyConfig()
+    proxy_url: str = ""   # segredo: vem do .env (PROXY_URL), nunca do yaml
 
     def url_allowed(self, url: str | None = None) -> bool:
         """A autorização do ambiente de testes vale só para os domínios listados."""
@@ -57,6 +68,11 @@ class Settings(BaseModel):
             return True
         host = (urlparse(url or self.target_url).hostname or "").lower()
         return any(host == d.lower() or host.endswith("." + d.lower()) for d in self.allowed_domains)
+
+    def with_overrides(self, overrides: dict[str, Any]) -> Settings:
+        """Cópia com a configuração própria de um lote por cima (accounts/emulator/proxy)."""
+        keep = {k: v for k, v in overrides.items() if k in ("accounts", "emulator", "proxy")}
+        return Settings.model_validate(_merge(self.model_dump(), keep))
 
     @property
     def adb(self) -> Path:
@@ -75,6 +91,7 @@ class Settings(BaseModel):
             "emulator": self.emulator.model_dump(),
             "appium": self.appium.model_dump(),
             "accounts": self.accounts.model_dump(),
+            "proxy": self.proxy.model_dump(),
         }
 
 
@@ -125,6 +142,8 @@ def load_settings(config_path: Path | None = None) -> Settings:
         emulator=raw.get("emulator", {}),
         appium=raw.get("appium", {}),
         accounts=raw.get("accounts", {}),
+        proxy=raw.get("proxy", {}),
+        proxy_url=os.environ.get("PROXY_URL", ""),
     )
 
 
