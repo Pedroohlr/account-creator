@@ -20,7 +20,7 @@ from ..config import (
     Settings,
 )
 from ..core import health
-from .estimate import devices_needed, estimate_seconds, fmt_duration
+from .estimate import DEFAULT_ACCOUNT_SECONDS, devices_needed, estimate_seconds, fmt_duration
 from .theme import AMBER, GREEN, RED
 from .widgets import StatCard, level_text, status_text
 
@@ -46,7 +46,7 @@ class DashboardPane(Vertical):
             yield StatCard("Contas criadas", "0", id="d-created", classes="good")
             yield StatCard("Falhas", "0", id="d-failed")
             yield StatCard("Taxa de sucesso", "—", id="d-rate")
-            yield StatCard("Tempo médio / conta", "—", id="d-avg")
+            yield StatCard("Tempo típico / conta", "—", id="d-avg")
             yield StatCard("Saúde do ambiente", "não verificada", id="d-health")
         yield Label("CONTAS RECENTES", classes="section")
         yield DataTable(id="d-recent", zebra_stripes=True)
@@ -66,7 +66,7 @@ class DashboardPane(Vertical):
         self.query_one("#d-failed", StatCard).set(str(counts["falhou"]), "bad" if counts["falhou"] else "")
         rate = f"{counts['criada'] * 100 / total:.0f}%" if total else "—"
         self.query_one("#d-rate", StatCard).set(rate)
-        self.query_one("#d-avg", StatCard).set(fmt_duration(repo.avg_duration()))
+        self.query_one("#d-avg", StatCard).set(fmt_duration(repo.median_duration()))
         table = self.query_one("#d-recent", DataTable)
         table.clear()
         for r in repo.list_recent(10):
@@ -140,13 +140,13 @@ class NewRunPane(VerticalScroll):
             box.update(f"[{AMBER}]{exc}[/]")
             return
         wipe = self.query_one("#sw-wipe", Switch).value
-        avg = self.app.repo.avg_duration()  # type: ignore[attr-defined]
+        avg = self.app.repo.median_duration()  # type: ignore[attr-defined]
         total = estimate_seconds(count, per, wipe, avg)
         devices = devices_needed(count, per)
-        base = "média real das suas últimas contas" if avg else "tempo padrão medido"
+        base = "mediana das suas últimas contas" if avg else "tempo padrão medido"
         box.update(
             f"[bold {GREEN}]Estimativa: ≈ {fmt_duration(total)}[/]   ·   {devices} dispositivo(s)   ·   "
-            f"{fmt_duration(avg or 140)} por conta ({base})"
+            f"{fmt_duration(avg or DEFAULT_ACCOUNT_SECONDS)} por conta ({base})"
         )
 
     def apply(self) -> int | None:

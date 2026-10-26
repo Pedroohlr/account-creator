@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import statistics
 import threading
 import time
 from datetime import datetime
@@ -19,8 +20,7 @@ from ..core.session import mobile_session
 from ..data.repository import AccountRecord
 from .estimate import (
     DEFAULT_ACCOUNT_SECONDS,
-    DEVICE_SETUP_SECONDS,
-    WIPE_EXTRA_SECONDS,
+    ROTATE_WIPE_SECONDS,
     fmt_duration,
 )
 from .theme import AMBER, GREEN_SOFT, RED
@@ -77,7 +77,7 @@ class RunScreen(Screen):
                 yield StatCard("Falhas", "0", id="c-failed")
                 yield StatCard("Dispositivo", "—", id="c-device")
                 yield StatCard("Decorrido", "0s", id="c-elapsed")
-                yield StatCard("Média / conta", "—", id="c-avg")
+                yield StatCard("Típico / conta", "—", id="c-avg")
                 yield StatCard("Restante", "—", id="c-eta")
             yield ProgressBar(total=self.count, show_eta=False, id="progress")
         yield Static("Preparando...", id="status")
@@ -168,7 +168,8 @@ class RunScreen(Screen):
         self.refresh_cards()
 
     def avg_seconds(self) -> float | None:
-        return sum(self.durations) / len(self.durations) if self.durations else None
+        """Mediana: a 1ª conta após trocar de dispositivo é mais lenta e distorceria a média."""
+        return statistics.median(self.durations) if self.durations else None
 
     def eta_seconds(self) -> float | None:
         remaining = self.count - self.created - self.failed
@@ -176,7 +177,7 @@ class RunScreen(Screen):
             return 0.0
         avg = self.avg_seconds() or DEFAULT_ACCOUNT_SECONDS
         rotations_left = max(0, self.device_total - max(self.device_number, 1))
-        return remaining * avg + rotations_left * (DEVICE_SETUP_SECONDS + WIPE_EXTRA_SECONDS)
+        return remaining * avg + rotations_left * ROTATE_WIPE_SECONDS
 
     def refresh_cards(self) -> None:
         q = self.query_one

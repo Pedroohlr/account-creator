@@ -23,7 +23,7 @@ def test_duration_device_avg_and_search(tmp_path):
     repo.add("bia@auth4.app", "p", "criada", duration=200.0, device=2)
     repo.add("caio@auth4.app", "p", "falhou", "x", duration=50.0, device=2)
 
-    assert repo.avg_duration() == 150.0
+    assert repo.median_duration() == 150.0
     assert [r.email for r in repo.search("bia")] == ["bia@auth4.app"]
     assert [r.email for r in repo.search(status="falhou")] == ["caio@auth4.app"]
     assert repo.list_recent()[1].device == 2
@@ -43,4 +43,4 @@ def test_migration_adds_columns_to_old_db(tmp_path):
     repo = AccountRepository(path)
     assert repo.list_recent()[0].duration is None
     repo.add("n@auth4.app", "p", "criada", duration=5.0)
-    assert repo.avg_duration() == 5.0
+    assert repo.median_duration() == 5.0

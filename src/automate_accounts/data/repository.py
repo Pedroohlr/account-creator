@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sqlite3
+import statistics
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime
@@ -74,15 +75,18 @@ class AccountRepository:
                 cur.lastrowid, email, password, status, error, now, duration, device
             )
 
-    def avg_duration(self, last: int = 20) -> float | None:
-        """Média (s) das últimas contas criadas com sucesso; None se não há histórico."""
+    def median_duration(self, last: int = 20) -> float | None:
+        """Mediana (s) das últimas contas criadas com sucesso; None se não há histórico.
+
+        Mediana e não média: a 1ª conta após trocar de dispositivo é bem mais lenta e distorceria.
+        """
         with closing(self._connect()) as conn:
-            row = conn.execute(
-                "SELECT AVG(duration) AS avg FROM (SELECT duration FROM accounts "
-                "WHERE status = 'criada' AND duration IS NOT NULL ORDER BY id DESC LIMIT ?)",
+            rows = conn.execute(
+                "SELECT duration FROM accounts WHERE status = 'criada' AND duration IS NOT NULL "
+                "ORDER BY id DESC LIMIT ?",
                 (last,),
-            ).fetchone()
-        return row["avg"]
+            ).fetchall()
+        return statistics.median(r["duration"] for r in rows) if rows else None
 
     def search(self, text: str = "", status: str | None = None, limit: int = 500) -> list[AccountRecord]:
         query, params = "SELECT * FROM accounts WHERE 1=1", []
