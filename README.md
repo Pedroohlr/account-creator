@@ -30,7 +30,16 @@ do emulador e salva `screenshots/smoke.png`):
 python -m automate_accounts smoke
 ```
 
+Cria uma conta de teste de ponta a ponta (imprime e-mail e senha):
+
+```powershell
+python -m automate_accounts create-one
+```
+
+O mapeamento do cadastro está em `docs/fluxo-cadastro.md`.
+
 ## Status
 
-Em construção. Pronto: configuração, logging, emulador, Appium, sessão mobile e smoke test.
-Próximos passos: fluxo de criação de conta, SQLite, orquestrador e painel Textual.
+Em construção. Pronto: configuração, logging, emulador, Appium, sessão mobile, smoke test,
+gerador de dados e fluxo de criação de conta.
+Próximos passos: SQLite, orquestrador (fila, retries) e painel Textual.
