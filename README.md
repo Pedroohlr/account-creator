@@ -19,15 +19,41 @@ A aba **Saúde** do painel confere tudo isso para você.
 
 | Aba | Tecla | Para que serve |
 |---|---|---|
-| Painel | F1 | Totais, taxa de sucesso, tempo médio por conta, estado da saúde e contas recentes |
-| Nova execução | F2 | Quantidade de contas, contas por dispositivo, wipe, User-Agent, headless e **estimativa de tempo** |
-| Contas | F3 | Lista com busca por e-mail, filtro por status e **exportação para CSV** (`exports/`) |
-| Saúde | F4 | Verifica SDK, AVD, aceleração, Java, Node, Appium, driver, RAM, site e banco |
-| Configurações | F5 | Edita e salva as configurações (`Ctrl+S`); salva em `config.local.yaml` |
+| Painel | F1 | Totais, taxa de sucesso, tempo típico por conta, estado da saúde e contas recentes |
+| Novo lote | F2 | Configura **um lote**: nome, quantidade, contas por dispositivo, wipe, User-Agent, proxy, preço do tráfego, notas e **estimativa de tempo** |
+| Lotes | F3 | Histórico de lotes: status, progresso, tempo, tráfego, **custo**, configuração usada e **log completo**; iniciar/retomar, relatório e exclusão |
+| Contas | F4 | Lista com busca por e-mail, filtro por status e **exportação para CSV** (`exports/`) |
+| Saúde | F5 | Verifica SDK, AVD, aceleração, Java, Node, Appium, driver, RAM, domínio, site e banco |
+| Configurações | F6 | Padrões globais (`Ctrl+S` salva em `config.local.yaml`) |
 
-Durante uma execução a tela mostra criadas/falhas, **dispositivo atual (ex.: 2 / 4)**, tempo
-decorrido, média por conta, tempo restante, a tabela de contas e o log. `S` para a execução
-(depois da conta atual) e `Esc` volta ao painel.
+## Lotes
+
+Cada execução é um **lote**: você configura (aba *Novo lote*), e o lote guarda a própria
+configuração, as contas criadas, métricas e um log de tudo que aconteceu.
+
+- **Registro**: início/fim, tempo ativo (sem contar pausas), criadas/falhas, dispositivos,
+  esperas por limite do site, trocas de IP, tráfego do proxy e **custo** (`tráfego × preço por GB`).
+- **Pausar/retomar**: `P` na execução pausa depois da conta atual; `S` para. Um lote parado,
+  pausado ou interrompido (inclusive se o programa fechar) aparece em *Lotes* e **continua de onde parou**.
+- **Relatório**: botão *Relatório* gera `exports/lote_<id>_<data>/` com `relatorio.md`,
+  `contas.csv` e `log.csv`.
+
+Na execução: `S` parar · `P` pausar/retomar · `Esc` voltar (quando terminar).
+
+## Proxy (IP)
+
+O site limita a criação **por IP**. Com proxy, o lote sai por outro IP quando isso acontece (em vez
+de esperar ~15 min) e a cada dispositivo novo. Modos (por lote):
+
+- **Dinâmico**: um gateway rotativo no `.env`: `PROXY_URL=https://host:porta:usuario:senha`
+  (também aceita `usuario:senha@host:porta`). IP novo = nova sessão (`{password}_session-<id>`,
+  configurável em `proxy.session_template`).
+- **Estático**: lista em `proxies.txt` (uma por linha, `host:porta:usuario:senha`); trocar = próximo da lista.
+
+Por dentro, um proxy local no PC (`127.0.0.1`) autentica no provedor, troca o IP e conta os bytes;
+o Chrome do emulador sai por ele (`--proxy-server=http://10.0.2.2:<porta>`). Antes de começar, o
+lote consulta e mostra o **IP de saída**. `.env` e `proxies.txt` ficam fora do git; senhas de proxy
+nunca vão para logs ou telas. A ferramenta só roda nos domínios de `allowed_domains`.
 
 ## Troca de dispositivo
 
@@ -41,8 +67,8 @@ A cada `per_device` contas (padrão **5**) o orquestrador:
 O Appium continua ligado durante a troca. Se 3 contas seguidas falharem, a troca acontece
 sozinha (recuperação); se mesmo assim falhar de novo, a execução é interrompida com aviso.
 
-> A troca muda os dados do aparelho e do navegador. **Não muda o endereço IP** (o emulador usa a
-> internet do seu PC).
+> A troca muda os dados do aparelho e do navegador. **Sozinha não muda o endereço IP**: para isso
+> use proxy (veja abaixo), que troca o IP junto com o dispositivo.
 
 ## Limite do site ("Muitas tentativas")
 
