@@ -85,7 +85,8 @@ def check_acceleration(s: Settings) -> Check:
         return Check("Aceleração (WHPX/HAXM)", FAIL, "emulator.exe não encontrado")
     out = _run([str(s.emulator_bin), "-accel-check"], 20)
     if "usable" in out.lower() and "not" not in out.lower().split("usable")[0][-12:]:
-        return Check("Aceleração (WHPX/HAXM)", OK, out.splitlines()[-1][:80])
+        line = next((ln for ln in out.splitlines() if "usable" in ln.lower()), out)
+        return Check("Aceleração (WHPX/HAXM)", OK, line.strip()[:80])
     return Check("Aceleração (WHPX/HAXM)", WARN, (out.splitlines() or ["indisponível"])[-1][:80],
                  "Sem aceleração o emulador fica muito lento. Ative Hyper-V/WHPX no Windows.")
 
