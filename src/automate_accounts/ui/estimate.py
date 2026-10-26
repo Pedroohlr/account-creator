@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 
 # Medidos no emulador do projeto (Pixel 4 API 35, com RAM livre):
-DEFAULT_ACCOUNT_SECONDS = 30.0    # criar uma conta (25-33 s)
+DEFAULT_ACCOUNT_SECONDS = 45.0    # criar uma conta (mediana de 25 a 110 s, conforme a RAM livre)
 FIRST_DEVICE_SECONDS = 105.0      # boot (~64 s) + Appium em paralelo + abrir a sessão
 ROTATE_WIPE_SECONDS = 220.0       # desligar + boot com -wipe-data (~136 s) + sessão e 1º uso do Chrome
 ROTATE_NOWIPE_SECONDS = 110.0     # desligar + boot normal + sessão
