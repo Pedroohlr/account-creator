@@ -21,6 +21,16 @@ copy .env.example .env
 
 Edite `.env` com o nome do seu AVD e ajuste `config.yaml`.
 
+## Uso
+
+Valida a infraestrutura (sobe o emulador e o Appium, abre a página de login no Chrome
+do emulador e salva `screenshots/smoke.png`):
+
+```powershell
+python -m automate_accounts smoke
+```
+
 ## Status
 
-Em construção. Ver o histórico de commits para o andamento.
+Em construção. Pronto: configuração, logging, emulador, Appium, sessão mobile e smoke test.
+Próximos passos: fluxo de criação de conta, SQLite, orquestrador e painel Textual.
