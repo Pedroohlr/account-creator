@@ -17,12 +17,21 @@ from ..config import (
     AccountsConfig,
     AppiumConfig,
     EmulatorConfig,
+    ProxyConfig,
     Settings,
 )
 from ..core import health
+from ..core import proxy as proxy_mod
 from .estimate import DEFAULT_ACCOUNT_SECONDS, devices_needed, estimate_seconds, fmt_duration
 from .theme import AMBER, GREEN, RED
 from .widgets import StatCard, level_text, status_text
+
+
+PROXY_OPTIONS = [
+    ("Sem proxy (conexão direta)", "none"),
+    ("Dinâmico (gateway rotativo, PROXY_URL)", "dynamic"),
+    ("Estático (lista em proxies.txt)", "static"),
+]
 
 
 def _row(label: str, widget, hint: str | None = None) -> Horizontal:
@@ -51,7 +60,7 @@ class DashboardPane(Vertical):
         yield Label("CONTAS RECENTES", classes="section")
         yield DataTable(id="d-recent", zebra_stripes=True)
         with Horizontal(classes="buttons"):
-            yield Button("▶  Nova execução", id="go-new", variant="primary")
+            yield Button("▶  Novo lote", id="go-new", variant="primary")
             yield Button("♥  Verificar saúde", id="go-health")
 
     def on_mount(self) -> None:
@@ -98,17 +107,25 @@ class DashboardPane(Vertical):
 # --------------------------------------------------------------------------
 class NewRunPane(VerticalScroll):
     def compose(self) -> ComposeResult:
-        yield Label("NOVA EXECUÇÃO", classes="section")
+        yield Label("NOVO LOTE", classes="section")
+        with Horizontal(classes="buttons"):
+            yield Button("▶  Criar e iniciar", id="start", variant="primary")
+            yield Button("Só criar o lote", id="plan")
+            yield Button("Testar infraestrutura", id="smoke")
+        yield Static("", id="estimate")
+        yield _row("Nome do lote", Input(id="nr-name", placeholder="ex.: Homologação 26/10"), "vazio = data e hora")
         yield _row("Quantidade de contas", Input(type="integer", id="nr-count"), "1 a 500")
         yield _row("Contas por dispositivo", Input(type="integer", id="nr-per"), "depois disso o dispositivo é trocado")
         yield _row("Tentativas extras por conta", Input(type="integer", id="nr-retries"), "0 a 5")
         yield _row("Limpar dados ao trocar (wipe)", Switch(id="sw-wipe"), "zera o emulador: parece outro aparelho")
         yield _row("User-Agent aleatório por dispositivo", Switch(id="sw-ua"))
         yield _row("Emulador sem janela (headless)", Switch(id="sw-headless"))
-        yield Static("", id="estimate")
-        with Horizontal(classes="buttons"):
-            yield Button("▶  Iniciar", id="start", variant="primary")
-            yield Button("Testar infraestrutura", id="smoke")
+        yield Label("Proxy / IP", classes="section")
+        yield _row("Proxy", Select(PROXY_OPTIONS, value="none", allow_blank=False, id="nr-proxy"))
+        yield _row("Trocar o IP se o site limitar", Switch(id="sw-rotate-limit"), "em vez de esperar minutos")
+        yield _row("Trocar o IP a cada dispositivo", Switch(id="sw-rotate-dev"))
+        yield _row("Preço do tráfego (por GB)", Input(id="nr-price"), "entra no custo do lote")
+        yield _row("Notas do lote", Input(id="nr-notes"))
 
     def on_mount(self) -> None:
         self.load_defaults()
@@ -121,6 +138,10 @@ class NewRunPane(VerticalScroll):
         self.query_one("#sw-wipe", Switch).value = s.accounts.wipe_on_rotate
         self.query_one("#sw-ua", Switch).value = s.accounts.random_user_agent
         self.query_one("#sw-headless", Switch).value = s.emulator.headless
+        self.query_one("#nr-proxy", Select).value = s.proxy.mode
+        self.query_one("#sw-rotate-limit", Switch).value = s.proxy.rotate_on_limit
+        self.query_one("#sw-rotate-dev", Switch).value = s.proxy.rotate_per_device
+        self.query_one("#nr-price", Input).value = str(s.proxy.price_per_gb)
         self.update_estimate()
 
     def values(self) -> tuple[int, int, int]:
@@ -149,28 +170,64 @@ class NewRunPane(VerticalScroll):
             f"{fmt_duration(avg or DEFAULT_ACCOUNT_SECONDS)} por conta ({base})"
         )
 
-    def apply(self) -> int | None:
-        """Aplica os valores da tela às configurações em memória; devolve a quantidade."""
+    def build(self) -> tuple[str, int, dict, str, str]:
+        """Valida o formulário e devolve (nome, quantidade, configuração do lote, notas, moeda)."""
+        count, per, retries = self.values()
         try:
-            count, per, retries = self.values()
-        except ValueError as exc:
-            self.notify(str(exc), severity="error")
-            return None
+            price = float(self.query_one("#nr-price", Input).value.replace(",", ".") or 0)
+        except ValueError:
+            raise ValueError("Preço do tráfego: informe um número.") from None
+        if price < 0:
+            raise ValueError("Preço do tráfego não pode ser negativo.")
+        config = {
+            "accounts": {
+                "per_device": per, "retries": retries,
+                "wipe_on_rotate": self.query_one("#sw-wipe", Switch).value,
+                "random_user_agent": self.query_one("#sw-ua", Switch).value,
+            },
+            "emulator": {"headless": self.query_one("#sw-headless", Switch).value},
+            "proxy": {
+                "mode": str(self.query_one("#nr-proxy", Select).value),
+                "rotate_on_limit": self.query_one("#sw-rotate-limit", Switch).value,
+                "rotate_per_device": self.query_one("#sw-rotate-dev", Switch).value,
+                "price_per_gb": price,
+            },
+        }
         s: Settings = self.app.settings  # type: ignore[attr-defined]
-        s.accounts.count, s.accounts.per_device, s.accounts.retries = count, per, retries
-        s.accounts.wipe_on_rotate = self.query_one("#sw-wipe", Switch).value
-        s.accounts.random_user_agent = self.query_one("#sw-ua", Switch).value
-        s.emulator.headless = self.query_one("#sw-headless", Switch).value
-        return count
+        if not s.url_allowed():
+            raise ValueError("Domínio fora de allowed_domains (config.yaml).")
+        merged = s.with_overrides(config)
+        try:
+            proxy_mod.validate_config(merged)
+        except proxy_mod.ProxyError as exc:
+            raise ValueError(str(exc)) from None
+        name = self.query_one("#nr-name", Input).value.strip() or f"Lote {datetime.now():%d/%m %H:%M}"
+        return name, count, config, self.query_one("#nr-notes", Input).value.strip(), merged.proxy.currency
+
+    def create_batch(self) -> int | None:
+        try:
+            name, count, config, notes, currency = self.build()
+        except (ValueError, ValidationError) as exc:
+            self.notify(str(exc).splitlines()[0], severity="error")
+            return None
+        batch = self.app.batches.create(name, count, config, notes, currency)  # type: ignore[attr-defined]
+        self.query_one("#nr-name", Input).value = ""
+        self.app.refresh_data()  # type: ignore[attr-defined]
+        return batch.id
 
     @on(Button.Pressed, "#start")
     def start(self) -> None:
-        if (count := self.apply()) is not None:
-            self.app.start_batch(count)  # type: ignore[attr-defined]
+        if (batch_id := self.create_batch()) is not None:
+            self.app.start_batch(batch_id)  # type: ignore[attr-defined]
+
+    @on(Button.Pressed, "#plan")
+    def plan(self) -> None:
+        if (batch_id := self.create_batch()) is not None:
+            self.notify(f"Lote #{batch_id} criado. Inicie pela aba Lotes quando quiser.")
+            self.app.show_tab("tab-batches")  # type: ignore[attr-defined]
 
     @on(Button.Pressed, "#smoke")
     def smoke(self) -> None:
-        self.apply()
         self.app.start_smoke()  # type: ignore[attr-defined]
 
 
@@ -306,6 +363,12 @@ class SettingsPane(VerticalScroll):
         yield _row("Folga após o boot (s)", Input(str(s.emulator.settle_seconds), type="integer", id="st-settle"))
         yield Label("Appium", classes="section")
         yield _row("Porta", Input(str(s.appium.port), type="integer", id="st-port"))
+        yield Label("Proxy / IP (padrões de cada novo lote)", classes="section")
+        yield _row("Modo", Select(PROXY_OPTIONS, value=s.proxy.mode, allow_blank=False, id="st-proxy-mode"),
+                   "o endereço do proxy fica no .env (PROXY_URL) ou em proxies.txt")
+        yield _row("Trocar o IP se o site limitar", Switch(s.proxy.rotate_on_limit, id="st-rotate-limit"))
+        yield _row("Trocar o IP a cada dispositivo", Switch(s.proxy.rotate_per_device, id="st-rotate-dev"))
+        yield _row("Preço do tráfego (por GB)", Input(str(s.proxy.price_per_gb), id="st-price"))
         yield Label("Contas", classes="section")
         yield _row("Quantidade padrão", Input(str(s.accounts.count), type="integer", id="st-count"))
         yield _row("Contas por dispositivo", Input(str(s.accounts.per_device), type="integer", id="st-per"))
@@ -365,6 +428,15 @@ class SettingsPane(VerticalScroll):
                 wipe_on_rotate=q("#st-wipe", Switch).value,
                 random_user_agent=q("#st-ua", Switch).value,
             ),
+            proxy=ProxyConfig(
+                mode=str(q("#st-proxy-mode", Select).value),
+                session_template=s.proxy.session_template,
+                rotate_on_limit=q("#st-rotate-limit", Switch).value,
+                rotate_per_device=q("#st-rotate-dev", Switch).value,
+                price_per_gb=float(q("#st-price", Input).value.replace(",", ".") or 0),
+                currency=s.proxy.currency,
+            ),
+            proxy_url=s.proxy_url,
         )
 
     def action_save_settings(self) -> None:

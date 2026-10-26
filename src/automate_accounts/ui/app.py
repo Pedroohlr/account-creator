@@ -10,7 +10,9 @@ from textual.widgets import Footer, Header, TabbedContent, TabPane
 from ..config import LOCAL_CONFIG, Settings, load_settings, save_local_settings
 from ..core import health
 from ..core.emulator import EmulatorManager
+from ..data.batches import BatchRepository
 from ..data.repository import AccountRepository
+from .batches_pane import BatchesPane
 from .estimate import devices_needed
 from .pages import AccountsPane, DashboardPane, HealthPane, NewRunPane, SettingsPane
 from .run_screen import RunScreen
@@ -18,7 +20,8 @@ from .theme import CSS
 
 TABS = [
     ("tab-dashboard", "Painel"),
-    ("tab-new", "Nova execução"),
+    ("tab-new", "Novo lote"),
+    ("tab-batches", "Lotes"),
     ("tab-accounts", "Contas"),
     ("tab-health", "Saúde"),
     ("tab-settings", "Configurações"),
@@ -41,22 +44,26 @@ class AccountsApp(App):
     TITLE = "Account Creator"
     BINDINGS = [
         Binding("f1", "tab('tab-dashboard')", "Painel"),
-        Binding("f2", "tab('tab-new')", "Nova execução"),
-        Binding("f3", "tab('tab-accounts')", "Contas"),
-        Binding("f4", "tab('tab-health')", "Saúde"),
-        Binding("f5", "tab('tab-settings')", "Config"),
+        Binding("f2", "tab('tab-new')", "Novo lote"),
+        Binding("f3", "tab('tab-batches')", "Lotes"),
+        Binding("f4", "tab('tab-accounts')", "Contas"),
+        Binding("f5", "tab('tab-health')", "Saúde"),
+        Binding("f6", "tab('tab-settings')", "Config"),
     ]
 
     def __init__(
         self,
         settings: Settings,
         repo: AccountRepository | None = None,
+        batches: BatchRepository | None = None,
         local_config_path: Path = LOCAL_CONFIG,
         config_path: Path | None = None,
     ) -> None:
         super().__init__()
         self.settings = settings
         self.repo = repo or AccountRepository()
+        self.batches = batches or BatchRepository(self.repo.path)
+        self.batches.mark_interrupted_running()   # sobras de uma sessão que morreu
         self.local_config_path = local_config_path
         self.config_path = config_path
         self.health_checks = list(health.CHECKS)
@@ -68,8 +75,10 @@ class AccountsApp(App):
         with ExplicitTabbedContent(initial="tab-dashboard"):
             with TabPane("Painel", id="tab-dashboard"):
                 yield DashboardPane()
-            with TabPane("Nova execução", id="tab-new"):
+            with TabPane("Novo lote", id="tab-new"):
                 yield NewRunPane()
+            with TabPane("Lotes", id="tab-batches"):
+                yield BatchesPane()
             with TabPane("Contas", id="tab-accounts"):
                 yield AccountsPane()
             with TabPane("Saúde", id="tab-health"):
@@ -105,15 +114,15 @@ class AccountsApp(App):
             pane = self.query_one(HealthPane)
             if not pane.ran_once:
                 pane.run_all()
-        elif pane_id in ("tab-dashboard", "tab-accounts"):
+        elif pane_id in ("tab-dashboard", "tab-accounts", "tab-batches"):
             self.refresh_data()
 
     # -- ações -------------------------------------------------------------
     def devices_for(self, count: int) -> int:
         return devices_needed(count, self.settings.accounts.per_device)
 
-    def start_batch(self, count: int) -> None:
-        self.push_screen(RunScreen("batch", count))
+    def start_batch(self, batch_id: int) -> None:
+        self.push_screen(RunScreen("batch", batch_id))
 
     def start_smoke(self) -> None:
         self.push_screen(RunScreen("smoke"))
@@ -121,6 +130,7 @@ class AccountsApp(App):
     def refresh_data(self) -> None:
         self.query_one(DashboardPane).refresh_data()
         self.query_one(AccountsPane).refresh_data()
+        self.query_one(BatchesPane).refresh_data()
         self.query_one(NewRunPane).update_estimate()
 
     def on_health(self, results: dict[str, health.Check]) -> None:
