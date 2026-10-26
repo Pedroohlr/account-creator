@@ -14,7 +14,9 @@ from .emulator import SERIAL
 log = logging.getLogger(__name__)
 
 
-def create_driver(settings: Settings, attempts: int = 3) -> webdriver.Remote:
+def create_driver(
+    settings: Settings, user_agent: str | None = None, attempts: int = 3
+) -> webdriver.Remote:
     options = UiAutomator2Options()
     options.platform_name = "Android"
     options.udid = SERIAL
@@ -23,10 +25,10 @@ def create_driver(settings: Settings, attempts: int = 3) -> webdriver.Remote:
     options.set_capability("chromedriverAutodownload", True)
     options.set_capability("autoGrantPermissions", True)
     # Pula o onboarding do Chrome ("Aceitar e continuar", sincronizar conta)
-    options.set_capability(
-        "goog:chromeOptions",
-        {"args": ["--no-first-run", "--disable-fre", "--no-default-browser-check"]},
-    )
+    chrome_args = ["--no-first-run", "--disable-fre", "--no-default-browser-check"]
+    if user_agent:
+        chrome_args.append(f"--user-agent={user_agent}")
+    options.set_capability("goog:chromeOptions", {"args": chrome_args})
 
     options.set_capability("adbExecTimeout", 60000)
     options.set_capability("uiautomator2ServerLaunchTimeout", 90000)
