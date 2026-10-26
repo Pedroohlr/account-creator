@@ -4,35 +4,14 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
-from collections.abc import Iterator
-from contextlib import contextmanager
-
-from .config import ROOT, Settings, load_settings
-from .core.appium_server import AppiumServer
-from .core.driver import clear_browser_state, create_driver
-from .core.emulator import EmulatorManager
+from .config import ROOT, load_settings
+from .core.driver import clear_browser_state
+from .core.session import mobile_session
 from .data.generator import generate_account
 from .flows.create_account import AccountCreationError, CreateAccountFlow
 from .logging_setup import setup_logging
 
 log = logging.getLogger("cli")
-
-
-@contextmanager
-def mobile_session(settings: Settings) -> Iterator:
-    """Sobe emulador + Appium, entrega o driver do Chrome e encerra tudo no final."""
-    emulator, appium = EmulatorManager(settings), AppiumServer(settings)
-    driver = None
-    try:
-        emulator.start()
-        appium.start()
-        driver = create_driver(settings)
-        yield driver
-    finally:
-        if driver:
-            driver.quit()
-        appium.stop()
-        emulator.stop()
 
 
 def screenshot(driver, name: str) -> str:
