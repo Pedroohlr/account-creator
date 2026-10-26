@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
 import subprocess
 import time
@@ -47,7 +48,12 @@ class AppiumServer:
         (ROOT / "logs").mkdir(exist_ok=True)
         self._log_file = open(ROOT / "logs" / "appium.log", "ab")
         log.info("Iniciando Appium: %s", " ".join(cmd))
-        self._proc = subprocess.Popen(cmd, stdout=self._log_file, stderr=subprocess.STDOUT)
+        # O Appium exige ANDROID_HOME no ambiente, mesmo quando o SDK foi autodetectado
+        env = {**os.environ, "ANDROID_HOME": str(self.settings.android_home),
+               "ANDROID_SDK_ROOT": str(self.settings.android_home)}
+        self._proc = subprocess.Popen(
+            cmd, stdout=self._log_file, stderr=subprocess.STDOUT, env=env
+        )
 
         deadline = time.monotonic() + cfg.startup_timeout
         while time.monotonic() < deadline:

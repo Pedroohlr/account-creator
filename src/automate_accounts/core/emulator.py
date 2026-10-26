@@ -79,12 +79,22 @@ class EmulatorManager:
             if self._proc and self._proc.poll() is not None:
                 raise EmulatorError(f"Emulador encerrou (código {self._proc.returncode}).")
             if self._device_online() and self.adb("shell", "getprop", "sys.boot_completed") == "1":
+                self._settle()
                 log.info("Emulador pronto.")
                 return
             time.sleep(3)
         raise EmulatorError(
             f"Timeout de {self.settings.emulator.boot_timeout}s esperando o boot do emulador."
         )
+
+    def _settle(self) -> None:
+        """Logo após o boot o sistema ainda carrega apps; espera o package manager e uma folga."""
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline:
+            if self.adb("shell", "pm", "path", "android").startswith("package:"):
+                break
+            time.sleep(2)
+        time.sleep(self.settings.emulator.settle_seconds)
 
     def stop(self) -> None:
         if not self._device_online() and not self._proc:

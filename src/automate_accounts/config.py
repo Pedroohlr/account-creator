@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 class EmulatorConfig(BaseModel):
     headless: bool = False
     boot_timeout: int = 240
+    settle_seconds: int = 20
     wipe_data: bool = False
 
 
