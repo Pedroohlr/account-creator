@@ -16,3 +16,6 @@ accounts:
   count: 5
   retries: 2
   delay_between: 2         # segundos entre contas
+  per_device: 5            # contas por dispositivo; depois o emulador é trocado
+  wipe_on_rotate: true     # a troca reinicia o emulador com -wipe-data (dados zerados)
+  random_user_agent: false # User-Agent diferente a cada dispositivo

@@ -24,3 +24,23 @@ def test_missing_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("automate_accounts.config.load_dotenv", lambda *_: None)
     with pytest.raises(RuntimeError):
         load_settings(tmp_path / "nao_existe.yaml")
+
+
+def test_local_config_overrides_and_roundtrip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from automate_accounts.config import save_local_settings
+
+    (tmp_path / "config.yaml").write_text("accounts:\n  count: 3\n  per_device: 5\n", encoding="utf-8")
+    monkeypatch.setenv("TARGET_URL", "https://exemplo.test/login")
+    monkeypatch.setenv("AVD_NAME", "Pixel_Env")
+    monkeypatch.setenv("ANDROID_HOME", str(tmp_path))
+
+    s = load_settings(tmp_path / "config.yaml")
+    assert s.accounts.per_device == 5 and s.avd_name == "Pixel_Env"
+
+    s.accounts.per_device = 3
+    s.avd_name = "Pixel_Local"
+    save_local_settings(s, tmp_path / "config.local.yaml")
+
+    again = load_settings(tmp_path / "config.yaml")
+    assert again.accounts.per_device == 3 and again.avd_name == "Pixel_Local"
+    assert again.accounts.count == 3
