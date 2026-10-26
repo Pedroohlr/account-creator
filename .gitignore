@@ -11,3 +11,4 @@ data/*.db
 .ruff_cache/
 config.local.yaml
 proxies.txt
+exports/
