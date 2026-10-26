@@ -21,12 +21,14 @@ CREATE TABLE IF NOT EXISTS accounts (
     error      TEXT,
     created_at TEXT NOT NULL,
     duration   REAL,
-    device     INTEGER
+    device     INTEGER,
+    batch_id   INTEGER
 )
 """
 MIGRATIONS = (
     "ALTER TABLE accounts ADD COLUMN duration REAL",
     "ALTER TABLE accounts ADD COLUMN device INTEGER",
+    "ALTER TABLE accounts ADD COLUMN batch_id INTEGER",
 )
 
 
@@ -40,6 +42,7 @@ class AccountRecord:
     created_at: str
     duration: float | None = None   # segundos gastos na conta (todas as tentativas)
     device: int | None = None       # número do dispositivo (ciclo de troca) em que foi criada
+    batch_id: int | None = None     # lote a que pertence
 
 
 class AccountRepository:
@@ -62,17 +65,17 @@ class AccountRepository:
 
     def add(
         self, email: str, password: str, status: str, error: str | None = None,
-        duration: float | None = None, device: int | None = None,
+        duration: float | None = None, device: int | None = None, batch_id: int | None = None,
     ) -> AccountRecord:
         now = datetime.now().isoformat(timespec="seconds")
         with closing(self._connect()) as conn, conn:
             cur = conn.execute(
-                "INSERT INTO accounts (email, password, status, error, created_at, duration, device) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (email, password, status, error, now, duration, device),
+                "INSERT INTO accounts (email, password, status, error, created_at, duration, device, batch_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (email, password, status, error, now, duration, device, batch_id),
             )
             return AccountRecord(
-                cur.lastrowid, email, password, status, error, now, duration, device
+                cur.lastrowid, email, password, status, error, now, duration, device, batch_id
             )
 
     def median_duration(self, last: int = 20) -> float | None:
@@ -88,7 +91,10 @@ class AccountRepository:
             ).fetchall()
         return statistics.median(r["duration"] for r in rows) if rows else None
 
-    def search(self, text: str = "", status: str | None = None, limit: int = 500) -> list[AccountRecord]:
+    def search(
+        self, text: str = "", status: str | None = None, limit: int = 500,
+        batch_id: int | None = None,
+    ) -> list[AccountRecord]:
         query, params = "SELECT * FROM accounts WHERE 1=1", []
         if text:
             query += " AND email LIKE ?"
@@ -96,11 +102,32 @@ class AccountRepository:
         if status:
             query += " AND status = ?"
             params.append(status)
+        if batch_id is not None:
+            query += " AND batch_id = ?"
+            params.append(batch_id)
         query += " ORDER BY id DESC LIMIT ?"
         params.append(limit)
         with closing(self._connect()) as conn:
             rows = conn.execute(query, params).fetchall()
         return [AccountRecord(**dict(r)) for r in rows]
+
+    def list_for_batch(self, batch_id: int) -> list[AccountRecord]:
+        """Contas do lote, da mais antiga para a mais nova."""
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                "SELECT * FROM accounts WHERE batch_id = ? ORDER BY id", (batch_id,)
+            ).fetchall()
+        return [AccountRecord(**dict(r)) for r in rows]
+
+    def batch_progress(self, batch_id: int) -> dict[str, int]:
+        """Contagens do lote e o maior número de dispositivo usado (para retomar a numeração)."""
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                "SELECT SUM(status = 'criada') AS ok, SUM(status = 'falhou') AS bad, "
+                "COALESCE(MAX(device), 0) AS device FROM accounts WHERE batch_id = ?",
+                (batch_id,),
+            ).fetchone()
+        return {"criada": row["ok"] or 0, "falhou": row["bad"] or 0, "device": row["device"]}
 
     def list_recent(self, limit: int = 50) -> list[AccountRecord]:
         with closing(self._connect()) as conn:
