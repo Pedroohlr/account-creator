@@ -20,4 +20,4 @@ accounts:
   wipe_on_rotate: true     # a troca reinicia o emulador com -wipe-data (dados zerados)
   random_user_agent: false # User-Agent diferente a cada dispositivo
   rate_limit_wait: 180     # espera (s) quando o site responde 'Muitas tentativas'
-  rate_limit_max_waits: 6  # quantas esperas seguidas antes de marcar a conta como falha
+  rate_limit_max_waits: 8  # esperas seguidas antes de desistir (8 x 180 s = 24 min; o site liberou em ~15 min)

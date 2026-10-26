@@ -44,6 +44,14 @@ sozinha (recuperação); se mesmo assim falhar de novo, a execução é interrom
 > A troca muda os dados do aparelho e do navegador. **Não muda o endereço IP** (o emulador usa a
 > internet do seu PC).
 
+## Limite do site ("Muitas tentativas")
+
+O site de homologação limita a criação de contas **por IP**: depois de muitas contas seguidas ele
+responde *"Muitas tentativas. Aguarde alguns minutos e tente novamente"*. A ferramenta reconhece
+isso, mostra uma contagem regressiva no painel e espera (`rate_limit_wait`, 180 s, até
+`rate_limit_max_waits` vezes) sem gastar tentativas. Se o bloqueio persistir, o lote para com um
+aviso. No teste, o bloqueio durou ~15 minutos. Trocar de dispositivo **não** resolve (é por IP).
+
 ## Configuração
 
 `config.yaml` traz os padrões; o painel grava alterações em `config.local.yaml` (ignorado pelo
@@ -78,6 +86,13 @@ emulator:
 - **Contas criadas:** `data/accounts.db` (SQLite). As senhas ficam em texto puro porque são
   contas de teste; não use este banco para contas reais.
 - Mapa do cadastro e seletores: `docs/fluxo-cadastro.md`.
+
+## Testes
+
+```powershell
+.venv\Scripts\python -m pytest              # rápidos, sem emulador (~20 s)
+.venv\Scripts\python -m pytest -m live      # integração no Chrome desktop contra o site (cria contas de teste)
+```
 
 ## Desenvolvimento
 

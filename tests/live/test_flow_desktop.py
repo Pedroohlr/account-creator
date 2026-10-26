@@ -9,9 +9,21 @@ from selenium import webdriver
 from automate_accounts.config import load_settings
 from automate_accounts.core.driver import clear_browser_state
 from automate_accounts.data.generator import generate_account
-from automate_accounts.flows.create_account import AccountCreationError, CreateAccountFlow
+from automate_accounts.flows.create_account import (
+    AccountCreationError,
+    CreateAccountFlow,
+    RateLimitError,
+)
 
 pytestmark = pytest.mark.live
+
+
+def run_flow(driver, url, data):
+    """Executa o fluxo; se o site estiver limitando tentativas, pula (não é falha do código)."""
+    try:
+        CreateAccountFlow(driver, url).run(data)
+    except RateLimitError:
+        pytest.skip("site limitando tentativas (Muitas tentativas); rode de novo mais tarde")
 
 
 @pytest.fixture(scope="module")
@@ -34,7 +46,7 @@ def test_creates_account_for_each_gender(driver, settings, gender):
     clear_browser_state(driver)
     data = generate_account()
     data = type(data)(**{**data.__dict__, "gender": gender})
-    CreateAccountFlow(driver, settings.target_url).run(data)
+    run_flow(driver, settings.target_url, data)
     assert "/conta" in driver.current_url
     assert data.first_name in driver.page_source
 
@@ -45,7 +57,7 @@ def test_every_month_and_edge_days(driver, settings):
         clear_browser_state(driver)
         base = generate_account()
         data = type(base)(**{**base.__dict__, "month": month, "day": day})
-        CreateAccountFlow(driver, settings.target_url).run(data)
+        run_flow(driver, settings.target_url, data)
         assert "/conta" in driver.current_url
 
 
