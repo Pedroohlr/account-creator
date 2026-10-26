@@ -37,6 +37,8 @@ class AccountsConfig(BaseModel):
     per_device: int = Field(5, ge=1)          # contas por dispositivo antes da troca
     wipe_on_rotate: bool = True               # troca = reinício com -wipe-data
     random_user_agent: bool = False           # User-Agent diferente a cada dispositivo
+    rate_limit_wait: int = Field(180, ge=10)  # segundos de espera quando o site limita as tentativas
+    rate_limit_max_waits: int = Field(6, ge=0)  # esperas seguidas antes de desistir da conta
 
 
 class Settings(BaseModel):

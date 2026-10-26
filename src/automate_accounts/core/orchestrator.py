@@ -12,7 +12,7 @@ from datetime import datetime
 from ..config import ROOT, Settings
 from ..data.generator import generate_account
 from ..data.repository import AccountRecord, AccountRepository
-from ..flows.create_account import AccountCreationError, CreateAccountFlow
+from ..flows.create_account import AccountCreationError, CreateAccountFlow, RateLimitError
 from .device import DeviceManager
 from .driver import clear_browser_state
 
@@ -23,6 +23,7 @@ log = logging.getLogger(__name__)
 #   device   -> number, total   (dispositivo atual / total previsto)
 #   progress -> done, total
 #   account  -> record (AccountRecord)
+#   cooldown -> seconds, wait, max_waits   (site limitando tentativas; aguardando)
 EventCallback = Callable[..., None]
 
 MAX_FAILS_BEFORE_ROTATE = 3   # falhas seguidas → troca de dispositivo de emergência
@@ -56,6 +57,23 @@ class Orchestrator:
         self.device_factory = device_factory
         self.flow_factory = flow_factory
         self.generator = generator
+        self.rate_limited = False   # True quando desistimos por limite persistente do site
+
+    def _sleep(self, seconds: float) -> None:
+        self.stop.wait(seconds)     # acorda na hora se o usuário parar
+
+    def _cooldown(self, wait_number: int) -> None:
+        """Espera o site liberar novas tentativas, avisando a contagem regressiva."""
+        cfg = self.settings.accounts
+        log.warning(
+            "Site limitando tentativas ('Muitas tentativas'). Aguardando %ds (%d/%d).",
+            cfg.rate_limit_wait, wait_number, cfg.rate_limit_max_waits,
+        )
+        for remaining in range(cfg.rate_limit_wait, 0, -1):
+            if self.stop.is_set():
+                return
+            self.emit("cooldown", seconds=remaining, wait=wait_number, max_waits=cfg.rate_limit_max_waits)
+            self._sleep(1)
 
     def _save_error_screenshot(self, driver) -> None:
         shots = ROOT / "screenshots"
@@ -71,7 +89,8 @@ class Orchestrator:
         started = time.monotonic()
         data = self.generator()
         error = "desconhecido"
-        for attempt in range(1, cfg.retries + 2):
+        attempt = waits = 0
+        while attempt < cfg.retries + 1:
             if self.stop.is_set():
                 error = "interrompido"
                 break
@@ -82,7 +101,16 @@ class Orchestrator:
                     data.email, data.password, "criada",
                     duration=time.monotonic() - started, device=device_number,
                 )
+            except RateLimitError as exc:
+                # limite do site: esperar não gasta tentativa (repetir na hora só piora)
+                waits += 1
+                if waits > cfg.rate_limit_max_waits:
+                    error = f"Limite do site persistiu após {cfg.rate_limit_max_waits} esperas ({exc})"
+                    self.rate_limited = True
+                    break
+                self._cooldown(waits)
             except AccountCreationError as exc:
+                attempt += 1
                 error = str(exc)
                 log.warning("Tentativa %d/%d falhou: %s", attempt, cfg.retries + 1, error)
                 self._save_error_screenshot(driver)
@@ -140,6 +168,12 @@ class Orchestrator:
                     consecutive_fails += 1
                 self.emit("account", record=record)
                 self.emit("progress", done=done + 1, total=count)
+                if self.rate_limited:
+                    result.error = (
+                        "O site continua limitando as tentativas ('Muitas tentativas'). "
+                        "Aguarde um tempo maior (ou use outro IP) e rode de novo."
+                    )
+                    break
                 if done + 1 < count and not self.stop.is_set():
                     time.sleep(cfg.delay_between)
         finally:

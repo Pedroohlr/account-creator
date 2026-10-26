@@ -151,3 +151,63 @@ def test_rotate_failure_aborts_batch_and_closes(tmp_path):
     result = o.run(6)
     assert result.created == 2 and "Troca de dispositivo falhou" in result.error
     assert FakeDevice.instances[0].log[-1] == "close"
+
+
+def test_rate_limit_waits_without_spending_attempts_then_succeeds(tmp_path, monkeypatch):
+    from automate_accounts.flows.create_account import RateLimitError
+
+    waits = []
+    monkeypatch.setattr(orch.Orchestrator, "_sleep", lambda self, s: waits.append(s))
+    calls = {"n": 0}
+
+    class LimitedTwice:
+        def __init__(self, *_): ...
+        def run(self, _d):
+            calls["n"] += 1
+            if calls["n"] <= 2:
+                raise RateLimitError("confirmação", "limite")
+
+    o, repo, events = make(tmp_path, LimitedTwice)
+    o.settings.accounts.retries = 0          # sem retries comuns: só as esperas do limite
+    o.settings.accounts.rate_limit_wait = 10
+    result = o.run(1)
+    assert (result.created, result.failed, result.error) == (1, 0, None)
+    assert calls["n"] == 3
+    cooldowns = [d for k, d in events if k == "cooldown"]
+    assert cooldowns[0]["seconds"] == 10 and cooldowns[0]["wait"] == 1
+    assert cooldowns[-1]["wait"] == 2 and len(waits) == 20   # 2 esperas × 10 s
+
+
+def test_rate_limit_persisting_aborts_batch_with_clear_message(tmp_path, monkeypatch):
+    from automate_accounts.flows.create_account import RateLimitError
+
+    monkeypatch.setattr(orch.Orchestrator, "_sleep", lambda self, s: None)
+
+    class AlwaysLimited:
+        def __init__(self, *_): ...
+        def run(self, _d):
+            raise RateLimitError("confirmação", "limite")
+
+    o, repo, _ = make(tmp_path, AlwaysLimited)
+    o.settings.accounts.rate_limit_wait = 10
+    o.settings.accounts.rate_limit_max_waits = 2
+    result = o.run(5)
+    assert result.failed == 1 and "Muitas tentativas" in result.error
+    assert FakeDevice.instances[0].log == ["open", "close"]       # não trocou de dispositivo à toa
+    assert "Limite do site persistiu" in repo.list_recent()[0].error
+
+
+def test_stop_during_cooldown_returns_quickly(tmp_path, monkeypatch):
+    from automate_accounts.flows.create_account import RateLimitError
+
+    stop = threading.Event()
+
+    class Limited:
+        def __init__(self, *_): ...
+        def run(self, _d):
+            stop.set()                      # usuário aperta S durante a espera
+            raise RateLimitError("confirmação", "limite")
+
+    o, repo, _ = make(tmp_path, Limited, stop=stop)
+    result = o.run(3)
+    assert result.created == 0 and result.stopped

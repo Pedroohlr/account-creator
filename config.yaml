@@ -19,3 +19,5 @@ accounts:
   per_device: 5            # contas por dispositivo; depois o emulador é trocado
   wipe_on_rotate: true     # a troca reinicia o emulador com -wipe-data (dados zerados)
   random_user_agent: false # User-Agent diferente a cada dispositivo
+  rate_limit_wait: 180     # espera (s) quando o site responde 'Muitas tentativas'
+  rate_limit_max_waits: 6  # quantas esperas seguidas antes de marcar a conta como falha
