@@ -84,5 +84,13 @@ PercentageStatus { color: #86efac; }
 #status { color: #4ade80; text-style: bold; margin-top: 1; }
 #estimate { border: round #166534; background: #0b1f12; padding: 1 2; margin-top: 1; color: #bbf7d0; height: auto; }
 
+/* Lotes */
+#b-table { height: 10; }
+#b-bottom { height: 1fr; margin-top: 1; }
+#b-detail { width: 62; border: round #166534; background: #0b1f12; padding: 1 2; height: 100%; overflow-y: auto; }
+#b-bottom RichLog { width: 1fr; height: 100%; margin-left: 1; }
+.buttons .muted { padding: 1 1 0 2; width: auto; }
+#proxy-line { margin-bottom: 0; }
+
 CountScreen { align: center middle; background: #07130bcc; }
 """
