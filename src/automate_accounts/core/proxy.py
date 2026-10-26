@@ -267,3 +267,15 @@ def build_proxy(settings, root: Path | None = None) -> LocalProxy | None:
         return LocalProxy([parse_upstream(settings.proxy_url)], dynamic=True,
                           session_template=settings.proxy.session_template)
     return LocalProxy(load_static_list((root or ROOT) / "proxies.txt"), dynamic=False)
+
+
+def validate_config(settings, root: Path | None = None) -> None:
+    """Confere (sem abrir portas) se o modo de proxy escolhido tem o que precisa."""
+    from ..config import ROOT
+
+    if settings.proxy.mode == "dynamic":
+        if not settings.proxy_url:
+            raise ProxyError("Modo dinâmico precisa de PROXY_URL no .env (host:porta:usuario:senha).")
+        parse_upstream(settings.proxy_url)
+    elif settings.proxy.mode == "static":
+        load_static_list((root or ROOT) / "proxies.txt")
