@@ -1,6 +1,11 @@
 import re
 
-from automate_accounts.data.generator import generate_account, make_password, make_username
+from automate_accounts.data.generator import (
+    GENDERS,
+    generate_account,
+    make_password,
+    make_username,
+)
 
 
 def test_username_only_allowed_chars():
@@ -24,5 +29,5 @@ def test_generate_account_ranges():
     for _ in range(50):
         a = generate_account()
         assert 1 <= a.day <= 28 and 1 <= a.month <= 12 and 1960 <= a.year <= 2005
-        assert 0 <= a.gender_index <= 2
+        assert a.gender in GENDERS
         assert a.email.endswith("@auth4.app")

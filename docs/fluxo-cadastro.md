@@ -19,5 +19,6 @@ Cada etapa avança com o botão **Próxima** (`button[type=submit]`).
 Observações:
 - O endereço final é `<usuario>@auth4.app`; o usuário aceita letras, números e pontos.
 - Não há captcha nem verificação por e-mail/SMS no fluxo observado.
+- Os selects de mês e gênero têm uma 1ª opção vazia e desabilitada; selecionar pelo `value` (mês `1`..`12`; gênero `female`, `male`, `unspecified`, `custom`), nunca pela posição.
 - Os `id` dos inputs são dinâmicos (`f-<name>-<hash>`): usar sempre `name=`.
 - Contas de teste podem ser removidas em `/conta` → Usuários.

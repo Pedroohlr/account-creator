@@ -11,6 +11,7 @@ from faker import Faker
 
 _fake = Faker("pt_BR")
 _SYMBOLS = "!@#$%&*?"
+GENDERS = ("female", "male", "unspecified")
 
 
 @dataclass(frozen=True)
@@ -20,7 +21,7 @@ class AccountData:
     day: int
     month: int          # 1-12
     year: int
-    gender_index: int   # posição no select: 0 Feminino, 1 Masculino, 2 Prefiro não dizer, 3 Personalizado
+    gender: str         # value do select: female | male | unspecified
     username: str       # só a parte antes de @auth4.app
     password: str
 
@@ -58,7 +59,7 @@ def generate_account() -> AccountData:
         day=secrets.randbelow(28) + 1,
         month=secrets.randbelow(12) + 1,
         year=secrets.randbelow(2005 - 1960 + 1) + 1960,
-        gender_index=secrets.randbelow(3),
+        gender=secrets.choice(GENDERS),
         username=make_username(first, last),
         password=make_password(),
     )
