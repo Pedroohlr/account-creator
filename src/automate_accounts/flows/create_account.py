@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import time
 
 from selenium.common.exceptions import (
     ElementClickInterceptedException,
@@ -150,10 +151,12 @@ class CreateAccountFlow:
             ("revisão e termos", self._review_and_accept),
             ("confirmação", self._confirm_success),
         ]
+        started = time.monotonic()
         for name, action in steps:
-            log.debug("Etapa: %s", name)
+            t0 = time.monotonic()
             try:
                 action()
             except (TimeoutException, WebDriverException) as exc:
                 raise AccountCreationError(name, str(exc).splitlines()[0]) from exc
-        log.info("Conta criada: %s", data.email)
+            log.info("etapa '%s': %.1fs", name, time.monotonic() - t0)
+        log.info("Conta criada: %s (%.1fs)", data.email, time.monotonic() - started)
