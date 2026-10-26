@@ -12,7 +12,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import Select, WebDriverWait
+from selenium.webdriver.support.ui import WebDriverWait
 
 from ..data.generator import AccountData
 
@@ -28,6 +28,9 @@ class AccountCreationError(RuntimeError):
         self.step = step
 
 
+SUBMIT = (By.CSS_SELECTOR, "button[type=submit]")
+
+
 def _button(label: str) -> tuple[str, str]:
     return By.XPATH, f"//button[normalize-space()='{label}']"
 
@@ -37,6 +40,14 @@ class CreateAccountFlow:
         self.driver = driver
         self.login_url = login_url
         self.wait = WebDriverWait(driver, STEP_TIMEOUT)
+
+
+    MONTH = (By.CSS_SELECTOR, "select[name=month]")
+    CHOICE = (By.CSS_SELECTOR, "input[name=choice]")
+    PASSWORD = (By.CSS_SELECTOR, "input[name=password]")
+    PHONE = (By.CSS_SELECTOR, "input[name=phone]")
+    RECOVERY = (By.CSS_SELECTOR, "input[name=recoveryEmail]")
+    REVIEW = (By.XPATH, "//*[contains(., 'Revise as informações')]")
 
     # -- helpers -----------------------------------------------------------
     def _visible(self, locator: tuple[str, str]) -> WebElement:
@@ -56,8 +67,30 @@ class CreateAccountFlow:
         el.clear()
         el.send_keys(value)
 
-    def _next(self) -> None:
-        self._click((By.CSS_SELECTOR, "button[type=submit]"))
+    def _select(self, name: str, value: str) -> None:
+        """Escolhe a opção pelo value via JS: Select do Selenium falha no Chrome mobile."""
+        el = self._visible((By.CSS_SELECTOR, f"select[name={name}]"))
+        self.driver.execute_script(
+            "arguments[0].value = arguments[1];"
+            "arguments[0].dispatchEvent(new Event('input', {bubbles: true}));"
+            "arguments[0].dispatchEvent(new Event('change', {bubbles: true}));",
+            el, value,
+        )
+
+    def _next(self, expect: tuple[str, str], button: tuple[str, str] = SUBMIT,
+              attempts: int = 3) -> None:
+        """Clica no botão e confirma que a etapa seguinte apareceu; repete o clique se não."""
+        self.driver.execute_script("document.activeElement && document.activeElement.blur();")
+        for attempt in range(1, attempts + 1):
+            self._click(button)
+            try:
+                WebDriverWait(self.driver, 8).until(EC.visibility_of_element_located(expect))
+                return
+            except TimeoutException:
+                if attempt == attempts:
+                    raise
+                log.warning("Etapa não avançou (tentativa %d/%d); clicando de novo.",
+                            attempt, attempts)
 
     # -- etapas ------------------------------------------------------------
     def _open_signup(self) -> None:
@@ -67,16 +100,14 @@ class CreateAccountFlow:
     def _name(self, d: AccountData) -> None:
         self._type("firstName", d.first_name)
         self._type("lastName", d.last_name)
-        self._next()
+        self._next(self.MONTH)
 
     def _birthday(self, d: AccountData) -> None:
         self._type("day", str(d.day))
-        Select(self._visible((By.CSS_SELECTOR, "select[name=month]"))).select_by_index(d.month - 1)
+        self._select("month", str(d.month))
         self._type("year", str(d.year))
-        Select(self._visible((By.CSS_SELECTOR, "select[name=gender]"))).select_by_index(
-            d.gender_index
-        )
-        self._next()
+        self._select("gender", d.gender)
+        self._next(self.CHOICE)
 
     def _address(self, d: AccountData) -> None:
         radios = self.wait.until(
@@ -86,21 +117,20 @@ class CreateAccountFlow:
         )
         self.driver.execute_script("arguments[0].click();", radios[2])  # "Criar seu próprio"
         self._type("username", d.username)
-        self._next()
+        self._next(self.PASSWORD)
 
     def _password(self, d: AccountData) -> None:
         self._type("password", d.password)
         self._type("confirm", d.password)
-        self._next()
+        self._next(self.PHONE)
 
-    def _skip(self, label_field: str) -> None:
-        self._visible((By.CSS_SELECTOR, f"input[name={label_field}]"))
-        self._click(_button("Pular"))
+    def _skip(self, current: tuple[str, str], expect: tuple[str, str]) -> None:
+        self._visible(current)
+        self._next(expect, button=_button("Pular"))
 
     def _review_and_accept(self) -> None:
         self._visible(_button("Próxima"))
-        self._visible((By.XPATH, "//*[contains(., 'Revise as informações')]"))
-        self._next()
+        self._next(_button("Concordo"))
         self._click(_button("Concordo"))
 
     def _confirm_success(self) -> None:
@@ -115,8 +145,8 @@ class CreateAccountFlow:
             ("data de nascimento", lambda: self._birthday(data)),
             ("endereço", lambda: self._address(data)),
             ("senha", lambda: self._password(data)),
-            ("telefone", lambda: self._skip("phone")),
-            ("e-mail de recuperação", lambda: self._skip("recoveryEmail")),
+            ("telefone", lambda: self._skip(self.PHONE, self.RECOVERY)),
+            ("e-mail de recuperação", lambda: self._skip(self.RECOVERY, self.REVIEW)),
             ("revisão e termos", self._review_and_accept),
             ("confirmação", self._confirm_success),
         ]
