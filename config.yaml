@@ -1,0 +1,17 @@
+target:
+  login_path: /login
+
+emulator:
+  headless: false          # true = emulator -no-window
+  boot_timeout: 240        # segundos para esperar o boot completo
+  wipe_data: false
+
+appium:
+  host: 127.0.0.1
+  port: 4723
+  startup_timeout: 60
+
+accounts:
+  count: 5
+  retries: 2
+  delay_between: 2         # segundos entre contas

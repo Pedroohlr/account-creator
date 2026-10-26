@@ -1,0 +1,35 @@
+[project]
+name = "automate-accounts"
+version = "0.1.0"
+description = "Ferramenta de terminal que cria contas em homologação usando o Chrome de um emulador Android."
+requires-python = ">=3.11"
+dependencies = [
+    "Appium-Python-Client>=4.0",
+    "selenium>=4.20",
+    "textual>=0.80",
+    "rich>=13.7",
+    "pydantic>=2.6",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0",
+    "faker>=25.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.5"]
+
+[project.scripts]
+automate-accounts = "automate_accounts.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
