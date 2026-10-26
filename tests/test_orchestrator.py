@@ -211,3 +211,174 @@ def test_stop_during_cooldown_returns_quickly(tmp_path, monkeypatch):
     o, repo, _ = make(tmp_path, Limited, stop=stop)
     result = o.run(3)
     assert result.created == 0 and result.stopped
+
+
+# -- lotes, pausa, proxy -------------------------------------------------------
+from automate_accounts.data import batches as bs  # noqa: E402
+
+
+class FakeProxy:
+    def __init__(self):
+        self.port = 7777
+        self.bytes_in = self.bytes_out = self.rotations = 0
+        self.label = "h:1 sessão x"
+        self.started = self.stopped = False
+
+    def start(self):
+        self.started = True
+
+    def stop(self):
+        self.stopped = True
+
+    def rotate(self):
+        self.rotations += 1
+        self.bytes_in += 1000
+        self.bytes_out += 500
+
+
+def make_batch(tmp_path, flow, count=3, per_device=5, proxy=None, proxy_cfg=None, pause=None, stop=None):
+    FakeDevice.instances = []
+    settings = Settings(
+        target_url="https://x.test/login", avd_name="a", android_home=tmp_path,
+        accounts={"retries": 0, "delay_between": 0, "per_device": 5},
+        proxy={"mode": "dynamic", "price_per_gb": 10.0, **(proxy_cfg or {})} if proxy else {},
+    )
+    db = tmp_path / "t.db"
+    repo, brepo = AccountRepository(db), bs.BatchRepository(db)
+    rec = brepo.create("Lote T", count, {"accounts": {"per_device": per_device}})
+    events: list = []
+    o = Orchestrator(
+        settings, repo, on_event=lambda kind, **d: events.append((kind, d)), stop=stop, pause=pause,
+        device_factory=FakeDevice, flow_factory=flow, generator=generate_account,
+        batches=brepo, batch_id=rec.id,
+        proxy_factory=lambda _s: proxy, ip_lookup=lambda _p: "200.1.1.1",
+    )
+    return o, repo, brepo, rec.id, events
+
+
+def test_batch_uses_own_config_and_records_everything(tmp_path):
+    o, repo, brepo, bid, events = make_batch(tmp_path, Ok, count=3, per_device=2)
+    assert o.settings.accounts.per_device == 2          # config do lote vale sobre a global (5)
+    result = o.run()
+    assert (result.created, result.failed) == (3, 0) and result.devices == 2
+    b = brepo.get(bid)
+    assert b.status == bs.DONE and (b.created, b.failed, b.devices) == (3, 0, 2)
+    assert b.started_at and b.finished_at and b.active_seconds >= 0
+    assert [r.batch_id for r in repo.list_for_batch(bid)] == [bid] * 3
+    msgs = [e.message for e in brepo.events(bid)]
+    assert any("Lote iniciado" in m for m in msgs) and any("Lote concluido" in m for m in msgs)
+    assert sum(m.startswith("Conta ") and "criada" in m for m in msgs) == 3
+
+
+def test_batch_stop_is_resumable_and_resume_continues(tmp_path):
+    stop = threading.Event()
+
+    class StopAfterTwo:
+        n = 0
+
+        def __init__(self, *_): ...
+        def run(self, _d):
+            StopAfterTwo.n += 1
+            if StopAfterTwo.n == 2:
+                stop.set()
+
+    o, repo, brepo, bid, _ = make_batch(tmp_path, StopAfterTwo, count=5, per_device=2, stop=stop)
+    result = o.run()
+    assert result.stopped and brepo.get(bid).status == bs.INTERRUPTED and brepo.get(bid).done == 2
+
+    # retomar: novo Orchestrator sobre o mesmo lote cria só as 3 que faltam, numerando dispositivos adiante
+    events = []
+    o2 = Orchestrator(
+        o.settings, repo, on_event=lambda k, **d: events.append((k, d)), device_factory=FakeDevice,
+        flow_factory=Ok, generator=generate_account, batches=brepo, batch_id=bid,
+    )
+    res2 = o2.run()
+    assert res2.created == 3
+    b = brepo.get(bid)
+    assert b.status == bs.DONE and b.created == 5 and b.remaining == 0
+    devices = [r.device for r in repo.list_for_batch(bid)]
+    assert devices[:2] == [1, 1] and devices[2] == 2          # retomada abre o dispositivo seguinte
+    assert [d["done"] for k, d in events if k == "progress"] == [3, 4, 5]
+
+
+def test_pause_blocks_until_resumed(tmp_path):
+    pause = threading.Event()
+    pause.set()
+    o, repo, brepo, bid, events = make_batch(tmp_path, Ok, count=2, pause=pause)
+    seen = []
+    orig = o.emit
+
+    def watch(kind, **d):
+        orig(kind, **d)
+        if kind == "paused" and d["paused"]:
+            seen.append(brepo.get(bid).status)
+            pause.clear()           # "retomar" assim que a pausa for registrada
+
+    o.emit = watch
+    result = o.run()
+    assert seen == [bs.PAUSED] and result.created == 2
+    assert brepo.get(bid).status == bs.DONE
+
+
+def test_rate_limit_with_proxy_swaps_ip_instead_of_waiting(tmp_path, monkeypatch):
+    from automate_accounts.flows.create_account import RateLimitError
+
+    waits = []
+    monkeypatch.setattr(orch.Orchestrator, "_sleep", lambda self, s: waits.append(s))
+    calls = {"n": 0}
+
+    class LimitedOnce:
+        def __init__(self, *_): ...
+        def run(self, _d):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RateLimitError("confirmação", "limite")
+
+    proxy = FakeProxy()
+    o, repo, brepo, bid, events = make_batch(tmp_path, LimitedOnce, count=1, proxy=proxy)
+    result = o.run()
+    assert result.created == 1 and proxy.rotations == 1
+    assert not [e for e in events if e[0] == "cooldown"] and 180 not in waits   # não esperou
+    b = brepo.get(bid)
+    assert b.rotations_ip == 1 and b.bytes_in == 1000 and b.bytes_out == 500
+    assert b.cost == pytest.approx(1500 / 1e9 * 10.0)
+    assert proxy.started and proxy.stopped
+    assert FakeDevice.instances[0].proxy_port == 7777
+
+
+def test_proxy_rotates_per_device_and_can_be_disabled(tmp_path):
+    proxy = FakeProxy()
+    o, *_ = make_batch(tmp_path, Ok, count=4, per_device=2, proxy=proxy)
+    o.run()
+    assert proxy.rotations == 1                          # 4 contas / 2 por dispositivo = 1 troca
+
+    proxy2 = FakeProxy()
+    o2, *_ = make_batch(tmp_path, Ok, count=4, per_device=2, proxy=proxy2, proxy_cfg={"rotate_per_device": False})
+    o2.run()
+    assert proxy2.rotations == 0
+
+
+def test_proxy_failure_aborts_before_emulator(tmp_path):
+    from automate_accounts.core.proxy import ProxyError
+
+    o, repo, brepo, bid, _ = make_batch(tmp_path, Ok, count=2, proxy=FakeProxy())
+    o.ip_lookup = lambda _p: (_ for _ in ()).throw(ProxyError("sem saída"))
+    # sem IP conhecido o lote segue (aviso), mas proxy inexistente aborta:
+    o.proxy_factory = lambda _s: (_ for _ in ()).throw(ProxyError("lista vazia"))
+    result = o.run()
+    assert "lista vazia" in result.error and FakeDevice.instances == []
+    b = brepo.get(bid)
+    assert b.status == bs.FAILED and "lista vazia" in b.error
+
+
+def test_unexpected_error_marks_batch_failed_and_reraises(tmp_path):
+    class Boom(FakeDevice):
+        def open(self):
+            raise RuntimeError("AVD não existe")
+
+    o, repo, brepo, bid, _ = make_batch(tmp_path, Ok)
+    o.device_factory = Boom
+    with pytest.raises(RuntimeError):
+        o.run()
+    b = brepo.get(bid)
+    assert b.status == bs.FAILED and "AVD" in b.error
