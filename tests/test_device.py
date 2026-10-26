@@ -80,3 +80,14 @@ def test_user_agent_format():
     ua = random_user_agent("131")
     assert ua.startswith("Mozilla/5.0 (Linux; Android ") and "Chrome/131.0.0.0 Mobile" in ua
     assert any(model in ua for model, _ in PROFILES)
+
+
+def test_open_refuses_domain_outside_allowlist(tmp_path):
+    import pytest
+
+    s = Settings(target_url="https://outro.com/login", avd_name="a", android_home=tmp_path,
+                 allowed_domains=["exemplo.test"])
+    dev = DeviceManager(s, emulator=FakeEmu(), appium=FakeAppium([]), driver_factory=lambda *_a: None)
+    with pytest.raises(PermissionError, match="allowed_domains"):
+        dev.open()
+    assert dev.emulator.calls == []     # nem chegou a ligar o emulador

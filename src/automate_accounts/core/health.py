@@ -144,6 +144,16 @@ def check_site(s: Settings) -> Check:
                      "Confira a URL em Configurações e sua conexão.")
 
 
+def check_allowed_domain(s: Settings) -> Check:
+    if not s.allowed_domains:
+        return Check("Domínio permitido", WARN, "sem restrição (allowed_domains vazio)",
+                     "Liste em config.yaml os domínios onde a automação é autorizada.")
+    if s.url_allowed():
+        return Check("Domínio permitido", OK, f"{s.target_url.split('/')[2]} está na lista")
+    return Check("Domínio permitido", FAIL, "a URL alvo não está em allowed_domains",
+                 "Ajuste a URL em Configurações ou a lista em config.yaml.")
+
+
 def check_database(_s: Settings) -> Check:
     try:
         counts = AccountRepository().counts()
@@ -162,6 +172,7 @@ CHECKS: list[tuple[str, Callable[[Settings], Check]]] = [
     ("Appium", check_appium),
     ("Driver UiAutomator2", check_appium_driver),
     ("Memória RAM livre", check_ram),
+    ("Domínio permitido", check_allowed_domain),
     ("Site de homologação", check_site),
     ("Banco de dados", check_database),
 ]

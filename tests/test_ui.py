@@ -170,7 +170,7 @@ async def test_real_mouse_clicks_switch_tab_and_start_run(app, monkeypatch):
         tabs = app.query_one(TabbedContent)
         await pilot.click("#go-new")
         for _ in range(4):
-            await pilot.pause()
+            await pilot.pause(0.1)
         assert tabs.active == "tab-new"
 
         await pilot.click("#start")
@@ -186,11 +186,11 @@ async def test_real_click_on_tab_header_and_health_button(app):
         tabs = app.query_one(TabbedContent)
         await pilot.click("#go-health")
         for _ in range(4):
-            await pilot.pause()
+            await pilot.pause(0.1)
         assert tabs.active == "tab-health"
         await pilot.click("#--content-tab-tab-new")   # clique no título da aba
         for _ in range(4):
-            await pilot.pause()
+            await pilot.pause(0.1)
         assert tabs.active == "tab-new"
 
 

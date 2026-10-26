@@ -344,6 +344,7 @@ class SettingsPane(VerticalScroll):
         s: Settings = self.app.settings  # type: ignore[attr-defined]
         return Settings(
             target_url=q("#st-url", Input).value.strip(),
+            allowed_domains=s.allowed_domains,
             avd_name=str(q("#st-avd", Select).value),
             android_home=s.android_home,
             emulator=EmulatorConfig(
@@ -375,6 +376,8 @@ class SettingsPane(VerticalScroll):
             new = self.build()
             if not new.target_url.startswith(("http://", "https://")):
                 raise ValueError("URL do site deve começar com http:// ou https://")
+            if not new.url_allowed():
+                raise ValueError("Domínio fora de allowed_domains (config.yaml): não é um ambiente autorizado.")
         except (ValueError, ValidationError) as exc:
             self.notify(str(exc).splitlines()[0], severity="error")
             return

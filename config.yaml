@@ -1,3 +1,8 @@
+# A automação só roda contra estes domínios (a autorização do ambiente de testes vale só neles).
+# Lista vazia = sem restrição.
+allowed_domains:
+  - fluxo-automacao.9eivnx.easypanel.host
+
 target:
   login_path: /login
 

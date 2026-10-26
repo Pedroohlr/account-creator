@@ -61,3 +61,11 @@ def test_run_check_swallows_unexpected_errors(settings):
 def test_free_ram_is_number_or_none():
     gb = health.free_ram_gb()
     assert gb is None or gb > 0
+
+
+def test_allowed_domain_check(settings):
+    assert health.check_allowed_domain(settings).level == health.WARN       # lista vazia
+    settings.allowed_domains = ["x.test"]
+    assert health.check_allowed_domain(settings).level == health.OK
+    settings.allowed_domains = ["outro.com"]
+    assert health.check_allowed_domain(settings).level == health.FAIL

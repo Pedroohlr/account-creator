@@ -44,3 +44,16 @@ def test_local_config_overrides_and_roundtrip(tmp_path: Path, monkeypatch: pytes
     again = load_settings(tmp_path / "config.yaml")
     assert again.accounts.per_device == 3 and again.avd_name == "Pixel_Local"
     assert again.accounts.count == 3
+
+
+def test_allowed_domains(tmp_path: Path):
+    from automate_accounts.config import Settings
+
+    s = Settings(target_url="https://fluxo.exemplo.test/login", avd_name="a", android_home=tmp_path,
+                 allowed_domains=["exemplo.test"])
+    assert s.url_allowed()
+    assert s.url_allowed("https://sub.exemplo.test/x")
+    assert not s.url_allowed("https://outro.com/login")
+    assert not s.url_allowed("https://exemplo.test.evil.com/login")   # sufixo enganoso
+    s.allowed_domains = []
+    assert s.url_allowed("https://qualquer.com")

@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import yaml
 from dotenv import load_dotenv
@@ -43,11 +44,19 @@ class AccountsConfig(BaseModel):
 
 class Settings(BaseModel):
     target_url: str
+    allowed_domains: list[str] = []   # vazio = sem restrição
     avd_name: str
     android_home: Path
     emulator: EmulatorConfig = EmulatorConfig()
     appium: AppiumConfig = AppiumConfig()
     accounts: AccountsConfig = AccountsConfig()
+
+    def url_allowed(self, url: str | None = None) -> bool:
+        """A autorização do ambiente de testes vale só para os domínios listados."""
+        if not self.allowed_domains:
+            return True
+        host = (urlparse(url or self.target_url).hostname or "").lower()
+        return any(host == d.lower() or host.endswith("." + d.lower()) for d in self.allowed_domains)
 
     @property
     def adb(self) -> Path:
@@ -61,6 +70,7 @@ class Settings(BaseModel):
         """Parte da configuração que o painel de Configurações grava em config.local.yaml."""
         return {
             "target_url": self.target_url,
+            "allowed_domains": self.allowed_domains,
             "avd_name": self.avd_name,
             "emulator": self.emulator.model_dump(),
             "appium": self.appium.model_dump(),
@@ -109,6 +119,7 @@ def load_settings(config_path: Path | None = None) -> Settings:
 
     return Settings(
         target_url=target_url,
+        allowed_domains=raw.get("allowed_domains", []),
         avd_name=avd_name,
         android_home=_find_android_home(),
         emulator=raw.get("emulator", {}),

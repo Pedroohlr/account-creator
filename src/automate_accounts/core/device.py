@@ -36,6 +36,11 @@ class DeviceManager:
 
     def open(self):
         """Liga emulador e Appium em paralelo (o boot demora) e abre o Chrome."""
+        if not self.settings.url_allowed():
+            raise PermissionError(
+                f"Domínio fora de allowed_domains ({', '.join(self.settings.allowed_domains)}): "
+                f"{self.settings.target_url}"
+            )
         self.emulator.begin()
         self.appium.start()
         self.emulator.wait_boot()
