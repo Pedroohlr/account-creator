@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+
 from .config import ROOT, load_settings
 from .core.driver import clear_browser_state
 from .core.session import mobile_session

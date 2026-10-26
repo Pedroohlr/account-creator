@@ -116,7 +116,7 @@ def test_retry_then_success_and_final_failure(tmp_path):
     o, repo, _ = make(tmp_path, Flaky)
     result = o.run(2)
     assert (result.created, result.failed) == (1, 1)
-    failed = [r for r in repo.list_recent() if r.status == "falhou"][0]
+    failed = next(r for r in repo.list_recent() if r.status == "falhou")
     assert "senha" in failed.error
 
 

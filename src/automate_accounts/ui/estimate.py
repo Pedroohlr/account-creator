@@ -27,7 +27,7 @@ def estimate_seconds(
 def fmt_duration(seconds: float | None) -> str:
     if seconds is None:
         return "—"
-    seconds = int(round(seconds))
+    seconds = round(seconds)
     hours, rest = divmod(seconds, 3600)
     minutes, secs = divmod(rest, 60)
     if hours:

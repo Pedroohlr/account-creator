@@ -12,7 +12,13 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Button, DataTable, Input, Label, Select, Static, Switch
 
-from ..config import ROOT, AccountsConfig, AppiumConfig, EmulatorConfig, Settings, save_local_settings
+from ..config import (
+    ROOT,
+    AccountsConfig,
+    AppiumConfig,
+    EmulatorConfig,
+    Settings,
+)
 from ..core import health
 from .estimate import devices_needed, estimate_seconds, fmt_duration
 from .theme import AMBER, GREEN, RED

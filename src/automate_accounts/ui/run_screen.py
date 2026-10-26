@@ -17,8 +17,13 @@ from textual.widgets import DataTable, Footer, Header, Label, ProgressBar, RichL
 from ..core.orchestrator import Orchestrator
 from ..core.session import mobile_session
 from ..data.repository import AccountRecord
-from .estimate import DEFAULT_ACCOUNT_SECONDS, DEVICE_SETUP_SECONDS, WIPE_EXTRA_SECONDS, fmt_duration
-from .theme import AMBER, GREEN, GREEN_SOFT, RED
+from .estimate import (
+    DEFAULT_ACCOUNT_SECONDS,
+    DEVICE_SETUP_SECONDS,
+    WIPE_EXTRA_SECONDS,
+    fmt_duration,
+)
+from .theme import AMBER, GREEN_SOFT, RED
 from .widgets import StatCard, status_text
 
 log = logging.getLogger("ui")
@@ -102,7 +107,7 @@ class RunScreen(Screen):
     @work(thread=True)
     def run_job(self) -> None:
         app = self.app
-        emit = lambda kind, **data: app.call_from_thread(self.handle_event, kind, data)  # noqa: E731
+        emit = lambda kind, **data: app.call_from_thread(self.handle_event, kind, data)
         try:
             if self.job == "batch":
                 result = Orchestrator(app.settings, app.repo, emit, self.stop_event).run(self.count)  # type: ignore[attr-defined]
