@@ -155,3 +155,39 @@ async def test_run_screen_shows_live_stats(app, monkeypatch):
         await pilot.press("escape")
         assert not isinstance(app.screen, RunScreen)
         assert card_value(app, "#d-created") == "4"   # dashboard atualizado ao terminar
+
+
+async def test_real_mouse_clicks_switch_tab_and_start_run(app, monkeypatch):
+    """Regressão: clicar no botão do Painel trocava de aba e voltava logo em seguida."""
+    class FakeOrchestrator:
+        def __init__(self, settings, repo, emit, stop): ...
+        def run(self, count):
+            return BatchResult(devices=1)
+
+    monkeypatch.setattr(run_screen, "Orchestrator", FakeOrchestrator)
+    async with app.run_test(size=(130, 40)) as pilot:
+        tabs = app.query_one(TabbedContent)
+        await pilot.click("#go-new")
+        for _ in range(4):
+            await pilot.pause()
+        assert tabs.active == "tab-new"
+
+        await pilot.click("#start")
+        for _ in range(3):
+            await pilot.pause()
+        assert isinstance(app.screen, RunScreen)
+        await app.workers.wait_for_complete()
+
+
+async def test_real_click_on_tab_header_and_health_button(app):
+    app.health_checks = []
+    async with app.run_test(size=(130, 40)) as pilot:
+        tabs = app.query_one(TabbedContent)
+        await pilot.click("#go-health")
+        for _ in range(4):
+            await pilot.pause()
+        assert tabs.active == "tab-health"
+        await pilot.click("#--content-tab-tab-new")   # clique no título da aba
+        for _ in range(4):
+            await pilot.pause()
+        assert tabs.active == "tab-new"

@@ -25,6 +25,17 @@ TABS = [
 ]
 
 
+class ExplicitTabbedContent(TabbedContent):
+    """TabbedContent que só troca de aba quando pedimos.
+
+    O padrão do Textual ativa a aba do widget que ganhou foco; esse evento chega atrasado e
+    desfazia a troca feita ao clicar num botão do Painel (voltava para a aba anterior).
+    """
+
+    def _on_tab_pane_focused(self, event) -> None:
+        event.stop()
+
+
 class AccountsApp(App):
     CSS = CSS
     TITLE = "Account Creator"
@@ -54,7 +65,7 @@ class AccountsApp(App):
     # -- layout ------------------------------------------------------------
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
-        with TabbedContent(initial="tab-dashboard"):
+        with ExplicitTabbedContent(initial="tab-dashboard"):
             with TabPane("Painel", id="tab-dashboard"):
                 yield DashboardPane()
             with TabPane("Nova execução", id="tab-new"):
@@ -76,6 +87,13 @@ class AccountsApp(App):
     # -- navegação ---------------------------------------------------------
     def show_tab(self, tab_id: str) -> None:
         self.query_one(TabbedContent).active = tab_id
+        self.call_after_refresh(self._focus_pane, tab_id)
+
+    def _focus_pane(self, tab_id: str) -> None:
+        """Leva o foco para o primeiro campo da aba (o teclado continua de onde o usuário está)."""
+        target = next(iter(self.query(f"#{tab_id} Input, #{tab_id} Select, #{tab_id} DataTable")), None)
+        if target is not None:
+            target.focus()
 
     def action_tab(self, tab_id: str) -> None:
         if not isinstance(self.screen, RunScreen):
