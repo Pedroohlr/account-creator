@@ -1,5 +1,4 @@
 import threading
-from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -18,21 +17,42 @@ class FakeDriver:
     def save_screenshot(self, _p): ...
 
 
-@contextmanager
-def fake_session(_settings):
-    yield FakeDriver()
+class FakeDevice:
+    instances: list = []
+
+    def __init__(self, _settings, fail_rotate=False):
+        self.number = 0
+        self.log: list[str] = []
+        self.fail_rotate = fail_rotate
+        FakeDevice.instances.append(self)
+
+    def open(self):
+        self.number = 1
+        self.log.append("open")
+        return FakeDriver()
+
+    def rotate(self):
+        if self.fail_rotate:
+            raise RuntimeError("emulador não subiu")
+        self.number += 1
+        self.log.append("rotate")
+        return FakeDriver()
+
+    def close(self):
+        self.log.append("close")
 
 
-def make(tmp_path: Path, flow, stop=None):
+def make(tmp_path: Path, flow, per_device=5, stop=None, device_cls=FakeDevice):
+    FakeDevice.instances = []
     settings = Settings(
         target_url="https://x.test/login", avd_name="a", android_home=tmp_path,
-        accounts={"count": 3, "retries": 1, "delay_between": 0},
+        accounts={"retries": 1, "delay_between": 0, "per_device": per_device},
     )
     repo = AccountRepository(tmp_path / "t.db")
     events: list = []
     o = Orchestrator(
         settings, repo, on_event=lambda kind, **d: events.append((kind, d)), stop=stop,
-        session_factory=fake_session, flow_factory=flow, generator=generate_account,
+        device_factory=device_cls, flow_factory=flow, generator=generate_account,
     )
     return o, repo, events
 
@@ -42,16 +62,44 @@ def no_screenshots(monkeypatch):
     monkeypatch.setattr(orch.Orchestrator, "_save_error_screenshot", lambda *_: None)
 
 
-def test_all_succeed(tmp_path):
-    class Ok:
-        def __init__(self, *_): ...
-        def run(self, _d): ...
+class Ok:
+    def __init__(self, *_): ...
+    def run(self, _d): ...
 
+
+class AlwaysFail:
+    def __init__(self, *_): ...
+    def run(self, _d):
+        raise AccountCreationError("senha", "timeout")
+
+
+def test_all_succeed(tmp_path):
     o, repo, events = make(tmp_path, Ok)
     result = o.run(3)
-    assert (result.created, result.failed) == (3, 0)
+    assert (result.created, result.failed, result.devices) == (3, 0, 1)
     assert repo.counts() == {"criada": 3, "falhou": 0}
     assert [d["done"] for k, d in events if k == "progress"] == [1, 2, 3]
+    assert repo.list_recent()[0].duration is not None
+
+
+def test_rotates_device_every_n_accounts(tmp_path):
+    o, repo, events = make(tmp_path, Ok, per_device=5)
+    result = o.run(12)
+    device = FakeDevice.instances[0]
+    assert device.log == ["open", "rotate", "rotate", "close"]
+    assert result.devices == 3 and result.created == 12
+    assert [d["number"] for k, d in events if k == "device"] == [1, 2, 3]
+    assert [d["total"] for k, d in events if k == "device"] == [3, 3, 3]
+    by_device = {}
+    for r in repo.list_recent(50):
+        by_device[r.device] = by_device.get(r.device, 0) + 1
+    assert by_device == {1: 5, 2: 5, 3: 2}
+
+
+def test_no_rotation_when_count_fits_one_device(tmp_path):
+    o, _, _ = make(tmp_path, Ok, per_device=5)
+    o.run(5)
+    assert FakeDevice.instances[0].log == ["open", "close"]
 
 
 def test_retry_then_success_and_final_failure(tmp_path):
@@ -72,7 +120,7 @@ def test_retry_then_success_and_final_failure(tmp_path):
     assert "senha" in failed.error
 
 
-def test_stop_between_accounts(tmp_path):
+def test_stop_between_accounts_still_closes_device(tmp_path):
     stop = threading.Event()
 
     class StopAfterFirst:
@@ -80,6 +128,26 @@ def test_stop_between_accounts(tmp_path):
         def run(self, _d):
             stop.set()
 
-    o, repo, _ = make(tmp_path, StopAfterFirst, stop=stop)
+    o, _, _ = make(tmp_path, StopAfterFirst, stop=stop)
     result = o.run(5)
     assert result.created == 1 and result.stopped
+    assert FakeDevice.instances[0].log[-1] == "close"
+
+
+def test_emergency_rotation_then_abort(tmp_path):
+    o, _, _ = make(tmp_path, AlwaysFail, per_device=50)
+    result = o.run(20)
+    # 3 falhas → troca de emergência → mais 3 falhas → segunda troca recusada: aborta
+    assert result.failed == 6 and result.error
+    assert FakeDevice.instances[0].log == ["open", "rotate", "close"]
+
+
+def test_rotate_failure_aborts_batch_and_closes(tmp_path):
+    class BadRotate(FakeDevice):
+        def __init__(self, s):
+            super().__init__(s, fail_rotate=True)
+
+    o, _, _ = make(tmp_path, Ok, per_device=2, device_cls=BadRotate)
+    result = o.run(6)
+    assert result.created == 2 and "Troca de dispositivo falhou" in result.error
+    assert FakeDevice.instances[0].log[-1] == "close"
