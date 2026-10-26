@@ -133,6 +133,12 @@ class RunScreen(Screen):
     def handle_event(self, kind: str, data: dict) -> None:
         if kind == "status":
             self.query_one("#status", Static).update(data["message"])
+        elif kind == "cooldown":
+            mins, secs = divmod(data["seconds"], 60)
+            self.query_one("#status", Static).update(
+                f"[{AMBER}]Site limitando tentativas ('Muitas tentativas') — retomando em "
+                f"{mins}:{secs:02d}  (espera {data['wait']}/{data['max_waits']})[/]"
+            )
         elif kind == "device":
             self.device_number, self.device_total = data["number"], data["total"]
             self.refresh_cards()

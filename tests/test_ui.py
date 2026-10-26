@@ -191,3 +191,22 @@ async def test_real_click_on_tab_header_and_health_button(app):
         for _ in range(4):
             await pilot.pause()
         assert tabs.active == "tab-new"
+
+
+async def test_run_screen_shows_cooldown_countdown(app, monkeypatch):
+    class FakeOrchestrator:
+        def __init__(self, settings, repo, emit, stop):
+            self.emit = emit
+
+        def run(self, count):
+            self.emit("cooldown", seconds=125, wait=1, max_waits=6)
+            return BatchResult(error="O site continua limitando as tentativas ('Muitas tentativas').")
+
+    monkeypatch.setattr(run_screen, "Orchestrator", FakeOrchestrator)
+    async with app.run_test() as pilot:
+        app.start_batch(1)
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        log_lines = "\n".join(str(line) for line in app.screen.query_one("#status", Static).render().plain.splitlines())
+        assert "ATENÇÃO" in log_lines and "Muitas tentativas" in log_lines

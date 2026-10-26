@@ -311,6 +311,9 @@ class SettingsPane(VerticalScroll):
         yield _row("Contas por dispositivo", Input(str(s.accounts.per_device), type="integer", id="st-per"))
         yield _row("Tentativas extras por conta", Input(str(s.accounts.retries), type="integer", id="st-retries"))
         yield _row("Pausa entre contas (s)", Input(str(s.accounts.delay_between), id="st-delay"))
+        yield _row("Espera quando o site limita (s)", Input(str(s.accounts.rate_limit_wait), type="integer", id="st-rl-wait"),
+                   "resposta 'Muitas tentativas'")
+        yield _row("Esperas seguidas antes de desistir", Input(str(s.accounts.rate_limit_max_waits), type="integer", id="st-rl-max"))
         yield _row("Limpar dados ao trocar (wipe)", Switch(s.accounts.wipe_on_rotate, id="st-wipe"))
         yield _row("User-Agent aleatório por dispositivo", Switch(s.accounts.random_user_agent, id="st-ua"))
         with Horizontal(classes="buttons"):
@@ -356,6 +359,8 @@ class SettingsPane(VerticalScroll):
                 per_device=_int(q("#st-per", Input).value, 1, 500, "Contas por dispositivo"),
                 retries=_int(q("#st-retries", Input).value, 0, 5, "Tentativas extras"),
                 delay_between=float(q("#st-delay", Input).value.replace(",", ".") or 0),
+                rate_limit_wait=_int(q("#st-rl-wait", Input).value, 10, 3600, "Espera do limite"),
+                rate_limit_max_waits=_int(q("#st-rl-max", Input).value, 0, 50, "Esperas seguidas"),
                 wipe_on_rotate=q("#st-wipe", Switch).value,
                 random_user_agent=q("#st-ua", Switch).value,
             ),
