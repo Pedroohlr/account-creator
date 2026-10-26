@@ -23,23 +23,29 @@ Edite `.env` com o nome do seu AVD e ajuste `config.yaml`.
 
 ## Uso
 
-Valida a infraestrutura (sobe o emulador e o Appium, abre a página de login no Chrome
-do emulador e salva `screenshots/smoke.png`):
+**Jeito fácil:** dê duplo clique em `iniciar.bat` (ou rode `iniciar.bat` no terminal).
+Na primeira vez ele cria o ambiente e o `.env` sozinho. Abre o menu:
 
-```powershell
-python -m automate_accounts smoke
+```
+1  Criar 1 conta
+2  Criar várias contas
+3  Testar infraestrutura (emulador + Appium)
+4  Ver contas criadas
+5  Sair
 ```
 
-Cria uma conta de teste de ponta a ponta (imprime e-mail e senha):
+Teclas: `1`-`5` escolhem direto, setas + Enter navegam, `S` para a execução em andamento,
+`Esc` volta. As contas criadas ficam em `data/accounts.db` (SQLite).
+
+**Linha de comando** (sem menu):
 
 ```powershell
-python -m automate_accounts create-one
+.venv\Scripts\python -m automate_accounts smoke        # valida a infraestrutura
+.venv\Scripts\python -m automate_accounts create-one   # cria 1 conta e imprime e-mail/senha
 ```
 
 O mapeamento do cadastro está em `docs/fluxo-cadastro.md`.
 
 ## Status
 
-Em construção. Pronto: configuração, logging, emulador, Appium, sessão mobile, smoke test,
-gerador de dados e fluxo de criação de conta.
-Próximos passos: SQLite, orquestrador (fila, retries) e painel Textual.
+Funcional: menu, criação de contas em fila com retries, registro em SQLite e parada com `S`.
