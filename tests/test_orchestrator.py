@@ -382,3 +382,21 @@ def test_unexpected_error_marks_batch_failed_and_reraises(tmp_path):
         o.run()
     b = brepo.get(bid)
     assert b.status == bs.FAILED and "AVD" in b.error
+
+
+def test_dead_browser_session_counts_as_failed_attempt_not_crash(tmp_path):
+    from selenium.common.exceptions import WebDriverException
+
+    class DeadDriver(FakeDriver):
+        def delete_all_cookies(self):
+            raise WebDriverException("disconnected: not connected to DevTools")
+
+    class DeadDevice(FakeDevice):
+        def open(self):
+            super().open()
+            return DeadDriver()
+
+    o, repo, events = make(tmp_path, Ok, device_cls=DeadDevice)
+    result = o.run(1)
+    assert (result.created, result.failed) == (0, 1)
+    assert "DevTools" in repo.list_recent()[0].error

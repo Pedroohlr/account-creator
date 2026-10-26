@@ -9,6 +9,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
+from selenium.common.exceptions import WebDriverException
+
 from ..config import ROOT, Settings
 from ..data import batches as batch_states
 from ..data.batches import BatchRepository
@@ -216,9 +218,9 @@ class Orchestrator:
                     self.rate_limited = True
                     break
                 self._cooldown(waits)
-            except AccountCreationError as exc:
+            except (AccountCreationError, WebDriverException) as exc:   # sessão do Chrome caída também conta
                 attempt += 1
-                error = str(exc)
+                error = str(exc).splitlines()[0]
                 log.warning("Tentativa %d/%d falhou: %s", attempt, cfg.retries + 1, error)
                 self._save_error_screenshot(driver)
         return self.repo.add(
