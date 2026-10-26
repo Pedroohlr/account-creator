@@ -20,7 +20,8 @@ from ..data.generator import AccountData
 log = logging.getLogger(__name__)
 
 STEP_TIMEOUT = 20
-SUCCESS_TEXT = "Sua conta foi criada"
+SUCCESS_TEXT = "Boas-vindas"   # título da /conta: "Boas-vindas, <nome>"
+RATE_LIMIT_TEXT = "Muitas tentativas"   # o site limita a criação de contas por IP
 
 
 class AccountCreationError(RuntimeError):
@@ -30,6 +31,17 @@ class AccountCreationError(RuntimeError):
 
 
 SUBMIT = (By.CSS_SELECTOR, "button[type=submit]")
+
+
+class RateLimitError(AccountCreationError):
+    """O site recusou por excesso de tentativas; é preciso esperar alguns minutos."""
+
+
+def _body_text(driver: WebDriver) -> str:
+    try:
+        return driver.find_element(By.TAG_NAME, "body").text
+    except WebDriverException:
+        return ""
 
 
 def _button(label: str) -> tuple[str, str]:
@@ -135,8 +147,14 @@ class CreateAccountFlow:
         self._click(_button("Concordo"))
 
     def _confirm_success(self) -> None:
-        self.wait.until(EC.url_contains("/conta"))
-        self.wait.until(EC.text_to_be_present_in_element((By.TAG_NAME, "body"), SUCCESS_TEXT))
+        def outcome(drv: WebDriver):
+            text = _body_text(drv)
+            if "/conta" in drv.current_url and SUCCESS_TEXT in text:
+                return "ok"
+            return "limit" if RATE_LIMIT_TEXT in text else False
+
+        if self.wait.until(outcome) == "limit":
+            raise RateLimitError("confirmação", "limite de tentativas do site")
 
     # -- execução ----------------------------------------------------------
     def run(self, data: AccountData) -> None:
@@ -156,7 +174,11 @@ class CreateAccountFlow:
             t0 = time.monotonic()
             try:
                 action()
+            except RateLimitError:
+                raise
             except (TimeoutException, WebDriverException) as exc:
+                if RATE_LIMIT_TEXT in _body_text(self.driver):
+                    raise RateLimitError(name, "limite de tentativas do site") from exc
                 raise AccountCreationError(name, str(exc).splitlines()[0]) from exc
             log.info("etapa '%s': %.1fs", name, time.monotonic() - t0)
         log.info("Conta criada: %s (%.1fs)", data.email, time.monotonic() - started)
